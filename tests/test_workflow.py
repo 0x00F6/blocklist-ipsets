@@ -9,16 +9,19 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from github_api import GitHub
 from publish import publish
-from sync import ASSET, TAG, needs_build, run
+from sync import ASSET, ARCHIVE, TAG, needs_build, run
+from archive import create_archive, verify_archive
 from validate import samples, source_files, validate
 
 SHA = "a" * 40
 OLD = "b" * 40
+EPOCH = 1_791_191_852
 
 
 def release(sha=OLD):
-    return {"id": 1, "tag_name": TAG, "body": f"Upstream commit: {sha}", "draft": False,
-            "assets": [{"id": 9, "name": ASSET, "size": 4, "state": "uploaded"}]}
+    return {"id": 1, "tag_name": TAG, "body": f"Upstream commit: {sha}\nPublication status: complete", "draft": False,
+            "assets": [{"id": 9, "name": ASSET, "size": 4, "state": "uploaded"},
+                       {"id": 10, "name": ARCHIVE, "size": 1, "state": "uploaded"}]}
 
 
 class FakeGitHub:
@@ -71,6 +74,10 @@ class FakeGitHub:
             return copy.deepcopy(self.current)
         return None
 
+    def upload_asset(self, release, path):
+        self.current["assets"] = [a for a in self.current["assets"] if a["name"] != path.name]
+        self.current["assets"].append({"id": 9 if path.name == ASSET else 10, "name": path.name, "size": path.stat().st_size, "state": "uploaded"})
+
     def releases(self):
         return ([self.current] if self.current else []) + self.other
 
@@ -86,7 +93,7 @@ class WorkflowTests(unittest.TestCase):
 
     def test_sha_marker_must_match_a_whole_line(self):
         item = release(SHA)
-        item["body"] += "suffix"
+        item["body"] = f"Upstream commit: {SHA}suffix\nPublication status: complete"
         self.assertTrue(needs_build(item, SHA))
 
     def test_sync_forces_only_main_and_verifies_the_upstream_commit(self):
@@ -130,9 +137,10 @@ class WorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             asset = Path(directory) / ASSET
             asset.write_bytes(b"mmdb")
-            publish(api, asset, SHA, upload=lambda path: None)
+            create_archive(asset, EPOCH)
+            publish(api, asset, SHA, EPOCH)
         self.assertEqual(api.current["body"].splitlines()[3], "Upstream commit: " + SHA)
-        update = next(i for i,c in enumerate(api.calls) if c[0] == "PATCH" and c[1].endswith("/releases/1"))
+        update = next(i for i,c in enumerate(api.calls) if c[0] == "PATCH" and c[1].endswith("/releases/1") and "Publication status: complete" in c[2].get("body", ""))
         prune = next(i for i,c in enumerate(api.calls) if c[0] == "DELETE")
         self.assertLess(prune, update)
         self.assertEqual(api.calls[prune][1], "/repos/0x00F6/blocklist-ipsets/releases/2")
@@ -144,28 +152,76 @@ class WorkflowTests(unittest.TestCase):
         api.current = release(SHA)
         self.assertEqual(run(api), (SHA, False))
         self.assertTrue(any(c[0] == "DELETE" and c[1].endswith("/releases/2") for c in api.calls))
+        self.assertFalse(any(c[0] == "DELETE" and "/releases/assets/" in c[1] for c in api.calls))
+
+    def test_missing_archive_or_pending_status_retries_the_same_source(self):
+        for item in (dict(release(SHA), assets=release(SHA)["assets"][:1]),
+                     dict(release(SHA), body=f"Upstream commit: {SHA}\nPublication status: pending")):
+            self.assertTrue(needs_build(item, SHA))
+
+    def test_second_upload_failure_retries_a_forced_same_source_build(self):
+        api = FakeGitHub()
+        api.current = release(SHA)
+        with tempfile.TemporaryDirectory() as directory:
+            asset = Path(directory) / ASSET
+            asset.write_bytes(b"mmdb")
+            create_archive(asset, EPOCH)
+            def upload(path):
+                if path.name == ARCHIVE:
+                    raise RuntimeError("archive upload failed")
+                api.upload_asset(api.current, path)
+            with self.assertRaisesRegex(RuntimeError, "archive upload failed"):
+                publish(api, asset, SHA, EPOCH, upload=upload)
+        self.assertTrue(needs_build(api.current, SHA))
+        self.assertFalse(any(c[0] == "DELETE" or (c[0] == "PATCH" and "/git/refs/" in c[1]) for c in api.calls))
+
+    def test_archive_confirmation_failure_does_not_mark_publication_complete(self):
+        api = FakeGitHub()
+        with tempfile.TemporaryDirectory() as directory:
+            asset = Path(directory) / ASSET
+            asset.write_bytes(b"mmdb")
+            create_archive(asset, EPOCH)
+            with self.assertRaisesRegex(RuntimeError, "was not confirmed"):
+                publish(api, asset, SHA, EPOCH, upload=lambda path: None)
+        self.assertTrue(needs_build(api.current, SHA))
+        self.assertEqual(api.tag["object"]["sha"], OLD)
+
+    def test_archive_must_match_before_any_remote_mutation(self):
+        api = FakeGitHub()
+        with tempfile.TemporaryDirectory() as directory:
+            asset = Path(directory) / ASSET
+            asset.write_bytes(b"mmdb")
+            create_archive(asset, EPOCH)
+            asset.write_bytes(b"oops")
+            with self.assertRaisesRegex(ValueError, "differs"):
+                publish(api, asset, SHA, EPOCH)
+        self.assertEqual(api.calls, [])
 
     def test_upload_failure_preserves_marker_and_does_not_prune(self):
         api = FakeGitHub()
         with tempfile.TemporaryDirectory() as directory:
             asset = Path(directory) / ASSET
             asset.write_bytes(b"mmdb")
+            create_archive(asset, EPOCH)
             def fail(_):
                 raise RuntimeError("upload failed")
             with self.assertRaises(RuntimeError):
-                publish(api, asset, SHA, upload=fail)
-        self.assertEqual(api.current["body"], "Upstream commit: " + OLD)
-        self.assertFalse(any(c[0] in ("DELETE", "PATCH") for c in api.calls))
+                publish(api, asset, SHA, EPOCH, upload=fail)
+        self.assertIn("Upstream commit: " + OLD, api.current["body"].splitlines())
+        self.assertIn("Publication status: pending", api.current["body"].splitlines())
+        self.assertTrue(needs_build(api.current, OLD))
+        self.assertFalse(any(c[0] == "DELETE" or (c[0] == "PATCH" and "/git/refs/" in c[1]) for c in api.calls))
 
     def test_first_publication_stays_draft_until_confirmed_upload(self):
         api = FakeGitHub(existing=False)
         with tempfile.TemporaryDirectory() as directory:
             asset = Path(directory) / ASSET
             asset.write_bytes(b"mmdb")
-            def upload(_):
+            create_archive(asset, EPOCH)
+            def upload(path):
                 self.assertTrue(api.current["draft"])
-                api.current["assets"] = release()["assets"]
-            publish(api, asset, SHA, upload=upload)
+                api.upload_asset(api.current, path)
+            publish(api, asset, SHA, EPOCH, upload=upload)
         self.assertFalse(api.current["draft"])
         self.assertFalse(needs_build(api.current, SHA))
         self.assertEqual(api.tag["object"]["sha"], SHA)
@@ -177,7 +233,8 @@ class WorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             asset = Path(directory) / ASSET
             asset.write_bytes(b"mmdb")
-            publish(api, asset, SHA, upload=lambda path: None)
+            create_archive(asset, EPOCH)
+            publish(api, asset, SHA, EPOCH)
         self.assertEqual(api.tag["object"]["sha"], SHA)
         self.assertFalse(needs_build(api.current, SHA))
         self.assertFalse(any(c[0] == "POST" and c[1].endswith("/releases") for c in api.calls))
@@ -185,13 +242,14 @@ class WorkflowTests(unittest.TestCase):
     def test_invalid_asset_never_touches_remote(self):
         api = FakeGitHub()
         with self.assertRaises(ValueError):
-            publish(api, "/missing/wrong.mmdb", SHA)
+            publish(api, "/missing/wrong.mmdb", SHA, EPOCH)
         self.assertEqual(api.calls, [])
 
     def test_upload_targets_release_id_and_streams_asset(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict('os.environ', GH_TOKEN='test-token'):
             asset = Path(directory) / ASSET
             asset.write_bytes(b"mmdb")
+            create_archive(asset, EPOCH)
             api = GitHub('0x00F6/blocklist-ipsets')
             def send(request, timeout):
                 self.assertIn('/releases/1/assets?name=' + ASSET, request.full_url)

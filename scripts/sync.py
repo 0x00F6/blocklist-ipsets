@@ -5,6 +5,8 @@ from github_api import GitHub
 
 TAG = "firehol-blocklist-ipsets"
 ASSET = TAG + ".mmdb"
+ARCHIVE = ASSET + ".tar.gz"
+ASSETS = (ASSET, ARCHIVE)
 MIRROR = "main"
 
 
@@ -12,7 +14,8 @@ def needs_build(release, upstream_sha, force=False):
     if force or release is None or release.get("draft"):
         return True
     marker = f"Upstream commit: {upstream_sha}"
-    complete = any(asset["name"] == ASSET and asset.get("size", 0) > 0 and asset.get("state") == "uploaded" for asset in release.get("assets", []))
+    complete = all(any(asset["name"] == name and asset.get("size", 0) > 0 and asset.get("state") == "uploaded" for asset in release.get("assets", [])) for name in ASSETS)
+    complete = complete and "Publication status: complete" in release.get("body", "").splitlines()
     return marker not in release.get("body", "").splitlines() or not complete
 
 
@@ -40,7 +43,7 @@ def run(api, force=False, emit=None):
             if existing["id"] != release["id"]:
                 api.request("DELETE", f"/repos/{api.repository}/releases/{existing['id']}")
         for extra in release.get("assets", []):
-            if extra["name"] != ASSET:
+            if extra["name"] not in ASSETS:
                 api.request("DELETE", f"/repos/{api.repository}/releases/assets/{extra['id']}")
     print(f"INFO mirror_synced branch={MIRROR} upstream_sha={sha} build_required={str(changed).lower()}")
     if emit:

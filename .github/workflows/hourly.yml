@@ -87,11 +87,16 @@ jobs:
         run: |
           python3 -m pip install --disable-pip-version-check maxminddb
           python3 scripts/validate.py data dist/firehol-blocklist-ipsets.mmdb
-      - name: Replace the single rolling release
+      - name: Compress and verify the MMDB tar.gz archive
+        if: steps.sync.outputs.changed == 'true'
+        run: |
+          python3 scripts/archive.py dist/firehol-blocklist-ipsets.mmdb data
+          sha256sum dist/firehol-blocklist-ipsets.mmdb.tar.gz
+      - name: Publish both files in the single rolling release
         if: steps.sync.outputs.changed == 'true'
         env:
           UPSTREAM_SHA: ${{ steps.sync.outputs.upstream_sha }}
-        run: python3 scripts/publish.py dist/firehol-blocklist-ipsets.mmdb "$UPSTREAM_SHA"
+        run: python3 scripts/publish.py dist/firehol-blocklist-ipsets.mmdb "$UPSTREAM_SHA" --build-epoch "$(git -C data show --no-patch --format=%ct HEAD)"
       - name: Run summary
         if: always()
         env:
@@ -104,4 +109,5 @@ jobs:
             echo "Upstream commit: $UPSTREAM_SHA"
             echo "Build required: $CHANGED"
             echo '[Rolling release](https://github.com/0x00F6/blocklist-ipsets/releases/tag/firehol-blocklist-ipsets)'
+            echo '[MMDB](https://github.com/0x00F6/blocklist-ipsets/releases/download/firehol-blocklist-ipsets/firehol-blocklist-ipsets.mmdb) · [tar.gz](https://github.com/0x00F6/blocklist-ipsets/releases/download/firehol-blocklist-ipsets/firehol-blocklist-ipsets.mmdb.tar.gz)'
           } >> "$GITHUB_STEP_SUMMARY"

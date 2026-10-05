@@ -27,14 +27,16 @@
 
 ## Release lifecycle
 
-- Publish one uploaded asset, `firehol-blocklist-ipsets.mmdb`, in one mutable release/tag, `firehol-blocklist-ipsets`. GitHub's automatic source archives are separate from uploaded assets.
-- Validate with both the Rust reader and independent MaxMind Python reader before replacing the asset.
+- Publish exactly two uploaded assets, `firehol-blocklist-ipsets.mmdb` and `firehol-blocklist-ipsets.mmdb.tar.gz`, in one mutable release/tag, `firehol-blocklist-ipsets`. Preserve both stable names and download links. GitHub's automatic source archives are separate from uploaded assets.
+- Validate the MMDB with both the Rust reader and independent MaxMind Python reader before creating the archive or replacing remote assets.
+- Use maximum gzip level 9 and USTAR with exactly one MMDB entry. Set its timestamp to the source commit epoch, permissions to 0644, and owner/group IDs to zero; omit gzip filename and generation date. Verify the gzip CRC and decompressed SHA-256 against the original before uploading. Replace local archive output only after verification succeeds.
 - Recover existing drafts through the release list; upload by exact release ID and create a missing tag before publishing.
-- Mark a commit published only after successful upload, tag movement, and cleanup. Enforce the one-release policy on unchanged-source runs too.
+- Mark publication pending before either upload, then confirm both assets by name, size, uploaded state, and digest when available. Mark the source SHA complete only after both uploads, tag movement, and cleanup. Retry partial uploads even for forced rebuilds of the same SHA. Enforce one release with exactly the two assets on unchanged-source runs too.
+- Generate release notes with both download links, actual sizes, compression savings, extraction instructions, SHA-256 hashes, source SHA, and source-date build_epoch.
 - Never store credentials or personal access tokens in the repository. Use the workflow's built-in `GITHUB_TOKEN` with `contents: write`.
 
 ## Logs and verification
 
 - Log detailed English messages on one line, with file/line context and actionable errors. Include the synchronized branch, source SHA, input counts, output size, and validation result where relevant.
-- Run `make check` before publishing code changes. Keep meaningful coverage for overlap propagation, error cancellation, recursive exclusions, metadata alignment, mirror creation, exact-SHA verification, and publication retries.
+- Run `make check` before publishing code changes. Keep meaningful coverage for overlap propagation, error cancellation, recursive exclusions, metadata alignment, mirror creation, exact-SHA verification, publication retries after partial two-file uploads, deterministic archive headers, corrupt gzip rejection, and decompression integrity.
 - After workflow or synchronization changes, verify a complete GitHub Actions run using this fork's `main` source commit. Preserve the unchanged-source skip behavior.

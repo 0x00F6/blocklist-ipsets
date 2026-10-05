@@ -1,8 +1,8 @@
-.PHONY: help check test build generate fmt
+.PHONY: help check test build generate archive fmt
 DATA ?= data
 OUTPUT ?= dist/firehol-blocklist-ipsets.mmdb
 help:
-	@echo 'make check | test | build | generate DATA=... OUTPUT=... | fmt'
+	@echo 'make check | test | build | generate DATA=... OUTPUT=... | archive DATA=... OUTPUT=... | fmt'
 check:
 	cargo fmt --check
 	cargo clippy --locked --all-targets -- -D warnings
@@ -15,5 +15,7 @@ build:
 	cargo build --release --locked
 generate: build
 	target/release/firehol-mmdb "$(DATA)" "$(OUTPUT)"
+archive:
+	python3 scripts/archive.py "$(OUTPUT)" "$(DATA)"
 fmt:
 	cargo fmt
