@@ -3,7 +3,6 @@ import argparse
 import datetime
 from pathlib import Path
 import re
-import subprocess
 from github_api import GitHub
 from sync import ASSET, TAG
 
@@ -15,6 +14,10 @@ def publish(api, asset, sha, upload=None):
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise ValueError("Expected a full upstream commit SHA")
     release = api.request("GET", f"/repos/{api.repository}/releases/tags/{TAG}", missing_ok=True)
+    if release is None:
+        # The tag endpoint omits drafts. Reuse an interrupted first publication.
+        drafts = [item for item in api.releases() if item["tag_name"] == TAG]
+        release = min(drafts, key=lambda item: item["id"]) if drafts else None
     if release and release.get("immutable"):
         raise RuntimeError("Disable immutable releases for this rolling release")
     if release is None:
@@ -24,7 +27,7 @@ def publish(api, asset, sha, upload=None):
         })
     if upload is None:
         def upload(path):
-            subprocess.run(["gh", "release", "upload", TAG, str(path), "--repo", api.repository, "--clobber"], check=True)
+            api.upload_asset(release, path)
     # On existing releases the previous successful SHA remains until upload succeeds.
     upload(asset)
     confirmed = api.request("GET", f"/repos/{api.repository}/releases/{release['id']}")

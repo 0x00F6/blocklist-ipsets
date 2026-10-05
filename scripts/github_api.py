@@ -3,6 +3,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+import urllib.parse
 
 
 class GitHub:
@@ -38,3 +39,23 @@ class GitHub:
             if len(batch) < 100:
                 return result
             page += 1
+
+    def upload_asset(self, release, asset):
+        # Address a release ID directly: several interrupted drafts can share a tag.
+        for existing in release.get("assets", []):
+            if existing["name"] == asset.name:
+                self.request("DELETE", f"/repos/{self.repository}/releases/assets/{existing['id']}")
+        url = f"https://uploads.github.com/repos/{self.repository}/releases/{release['id']}/assets?name=" + urllib.parse.quote(asset.name)
+        with asset.open("rb") as source:
+            request = urllib.request.Request(url, data=source, method="POST", headers={
+                "Authorization": "Bearer " + self.token,
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+                "Content-Type": "application/octet-stream",
+                "Content-Length": str(asset.stat().st_size),
+            })
+            try:
+                with urllib.request.urlopen(request, timeout=300) as response:
+                    return json.loads(response.read())
+            except urllib.error.HTTPError as error:
+                raise RuntimeError(f"GitHub asset upload failed: HTTP {error.code}; next cron will retry") from error

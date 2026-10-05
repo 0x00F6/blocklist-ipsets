@@ -48,6 +48,8 @@ class FakeGitHub:
             self.tag["object"]["sha"] = data["sha"]
             return copy.deepcopy(self.tag)
         if method == "GET" and "/releases/" in path:
+            if "/releases/tags/" in path and self.current and self.current["draft"]:
+                return None
             return copy.deepcopy(self.current)
         if method == "POST" and path.endswith("/releases"):
             self.current = dict(data, id=1, assets=[])
@@ -58,7 +60,7 @@ class FakeGitHub:
         return None
 
     def releases(self):
-        return [self.current] + self.other
+        return ([self.current] if self.current else []) + self.other
 
 
 class WorkflowTests(unittest.TestCase):
@@ -148,12 +150,30 @@ class WorkflowTests(unittest.TestCase):
             publish(api, asset, SHA, upload=lambda path: None)
         self.assertEqual(api.tag["object"]["sha"], SHA)
         self.assertFalse(needs_build(api.current, SHA))
+        self.assertFalse(any(c[0] == "POST" and c[1].endswith("/releases") for c in api.calls))
 
     def test_invalid_asset_never_touches_remote(self):
         api = FakeGitHub()
         with self.assertRaises(ValueError):
             publish(api, "/missing/wrong.mmdb", SHA)
         self.assertEqual(api.calls, [])
+
+    def test_upload_targets_release_id_and_streams_asset(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict('os.environ', GH_TOKEN='test-token'):
+            asset = Path(directory) / ASSET
+            asset.write_bytes(b"mmdb")
+            api = GitHub('0x00F6/blocklist-ipsets')
+            def send(request, timeout):
+                self.assertIn('/releases/1/assets?name=' + ASSET, request.full_url)
+                self.assertEqual(request.get_header('Content-length'), '4')
+                self.assertEqual(request.data.read(), b'mmdb')
+                from unittest.mock import MagicMock
+                response = MagicMock()
+                response.__enter__.return_value.read.return_value = b'{"id":10}'
+                return response
+            with patch.object(api, 'request') as calls, patch('urllib.request.urlopen', side_effect=send):
+                self.assertEqual(api.upload_asset(release(), asset), {"id": 10})
+                calls.assert_called_once_with('DELETE', '/repos/0x00F6/blocklist-ipsets/releases/assets/9')
 
     def test_independent_parser_preserves_metadata_changes_and_country_pruning(self):
         with tempfile.TemporaryDirectory() as directory:
