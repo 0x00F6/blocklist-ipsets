@@ -21,6 +21,8 @@
 - Preserve all contributions, including duplicates. Store aligned arrays; use empty strings for missing optional metadata. Never store update frequency.
 - Use the pinned libmaxminddb-rs writer with `MergeStrategy::DeepMerge`. Preserve metadata from overlapping ancestor networks in more-specific records.
 - Use Rayon for parallel parsing and bounded batches. Keep the writer on one consumer thread. External sorting must cap open files and memory.
+- Set global MMDB `build_epoch` to the committer timestamp (`%ct`) of the exact FireHOL source commit. Read it from the source repository root; never use the pipeline commit, author date, file modification time, or generation clock. Reject parent-repository fallback. Explicit timestamps through the Rust API must describe the source snapshot.
+- Independently verify `build_epoch` against the source checkout and log the actual global MMDB metadata. Rebuilding the same source snapshot must preserve its timestamp and produce identical bytes.
 - Preserve the IPv4/IPv6 MMDB alias handling and independent-reader validation.
 
 ## Release lifecycle

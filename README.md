@@ -10,6 +10,7 @@ An hourly mirror of [firehol/blocklist-ipsets](https://github.com/firehol/blockl
 - [Branches and files](#branches-and-files)
 - [Automation](#automation)
 - [Generation](#generation)
+- [MMDB metadata](#mmdb-metadata)
 - [Record schema](#record-schema)
 - [Local use](#local-use)
 - [Validation](#validation)
@@ -64,16 +65,34 @@ A failed build is retried even when `main` already matches upstream. A missing o
 
 1. Fetch the current FireHOL `master` SHA and force-update this fork's `main` reference, creating it if missing.
 2. Compare that SHA with the last **successfully published** rolling release and check that the asset is complete. Skip compilation when both match. Missing releases or interrupted builds are retried.
-3. Verify that `main` points to that SHA, then check out that exact commit from this fork into `data/`. Subsequent branch updates cannot change the build inputs.
+3. Verify that `main` points to that SHA, then check out that exact commit from this fork into `data/`. Read its Git committer timestamp for the MMDB `build_epoch`. Subsequent branch updates cannot change the build inputs.
 4. Walk `.ipset` and `.netset` files recursively. Prune every directory ending with `_country`; skip hidden directories and symlinks.
 5. Parse files in parallel with Rayon, largest first. Normalize bare IPv4 to `/32` and IPv6 to `/128`. Preserve CIDRs and mask host bits. Parse headers, inline comments, CRLF, BOM and metadata changes within files. Invalid addresses fail with file/line context.
 6. Send batches of 32,768 compact entries through a bounded standard-library channel. Sort each batch to disk, then merge runs with a maximum fan-in of 48. No complete input vector or globally locked writer is required.
 7. Traverse sorted networks with a prefix stack. Include all ancestor contributions in more-specific records: the library's `DeepMerge` only merges values at an identical prefix, so this propagation is explicit.
 8. Build aligned arrays using the actual `MergeStrategy::DeepMerge` writer. Duplicate values remain present. Cache up to 4,096 reusable merged payloads; this cache does not remove duplicate entries. A single writer builds the final IPv4/IPv6 MMDB.
-9. Validate the generated MMDB with the Rust reader and sampled source contributions with MaxMind's independent Python reader. Only validated output replaces the local file.
+9. Validate the generated MMDB with the Rust reader and sampled source contributions with MaxMind's independent Python reader. Check that `build_epoch` exactly matches the source commit timestamp and log the actual file metadata. Only validated output replaces the local file.
 10. Reuse an existing draft if publication was interrupted, upload to its exact release ID, confirm the asset, create or update the tag, and remove other releases. Mark the source SHA completed only after those operations succeed. Build failures preserve the prior release; an interrupted asset replacement can temporarily leave the download unavailable and is retried on the next run.
 
 The channel, sort runs, readers and payload cache are bounded. The final libmaxminddb-rs trie is in memory, so peak memory still grows with the number of distinct prefixes and metadata combinations. No claim of bounded total memory is made.
+
+## MMDB metadata
+
+🗓️ `build_epoch` is the Unix timestamp of the **committer date of the exact FireHOL source commit**, read with `git show --no-patch --format=%ct HEAD` in `data/`. It represents the data snapshot date and stays unchanged when the same source commit is rebuilt.
+
+| Field | Value |
+| --- | --- |
+| `database_type` | `firehol-blocklist-ipsets` |
+| `description.en` | FireHOL IP reputation; arrays with preserved duplicates and overlapping sources |
+| `ip_version` | `6`, covering IPv4 and IPv6 |
+| `languages` | `["en"]` |
+| `build_epoch` | FireHOL source commit's committer timestamp in Unix seconds |
+| Binary format version | `2.0` |
+| `node_count`, `record_size` | Computed by the writer |
+
+The source directory must be the root of its own Git checkout. The CLI fails if the commit date cannot be read. When using an exported source archive through the Rust API, provide its known source timestamp explicitly in `Options.build_epoch`.
+
+The independent validator compares the stored timestamp with the checked-out source commit and logs all global metadata on one line. For example, commit `3417de0f1f36025827c9a2752c8672e2c5fce097` has `build_epoch = 1791191852`, corresponding to `2026-10-05T09:17:32Z`.
 
 ## Record schema
 

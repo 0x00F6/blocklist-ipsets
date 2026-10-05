@@ -8,6 +8,7 @@ use std::{
     io::{BufRead, BufReader, BufWriter, Read, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::{Path, PathBuf},
+    process::Command,
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -33,6 +34,8 @@ pub struct Options {
     pub threads: usize,
     pub batch_size: usize,
     pub queue_size: usize,
+    /// Source commit timestamp; omitted values are read from the source Git checkout.
+    pub build_epoch: Option<u64>,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -40,6 +43,7 @@ impl Default for Options {
             threads: std::thread::available_parallelism().map_or(1, usize::from),
             batch_size: BATCH_SIZE,
             queue_size: QUEUE_SIZE,
+            build_epoch: None,
         }
     }
 }
@@ -440,6 +444,34 @@ pub fn validate_record(record: &Value) -> Result<()> {
     Ok(())
 }
 
+/// Read the committer timestamp of HEAD in the exact source repository root.
+pub fn source_commit_epoch(root: &Path) -> Result<u64> {
+    let git = |args: &[&str]| -> Result<String> {
+        let result = Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .output()
+            .context("Cannot read source commit date; install Git and use the source checkout")?;
+        ensure!(
+            result.status.success(),
+            "Cannot read source commit date in {}: {}; use a Git source checkout or provide Options.build_epoch",
+            root.display(),
+            String::from_utf8_lossy(&result.stderr).trim()
+        );
+        Ok(String::from_utf8(result.stdout)?.trim().to_owned())
+    };
+    let checkout = git(&["rev-parse", "--show-toplevel"])?;
+    ensure!(
+        fs::canonicalize(root)? == fs::canonicalize(checkout)?,
+        "Source directory must be its own Git repository root; refusing to use a parent repository's commit date"
+    );
+    let epoch = git(&["show", "--no-patch", "--format=%ct", "HEAD"])?
+        .parse::<u64>()
+        .context("Source commit timestamp must be a nonnegative Unix timestamp")?;
+    Ok(epoch)
+}
+
 pub fn generate(root: &Path, output: &Path, options: &Options) -> Result<Stats> {
     ensure!(
         options.threads > 0 && options.batch_size > 0 && options.queue_size > 0,
@@ -514,7 +546,12 @@ pub fn generate(root: &Path, output: &Path, options: &Options) -> Result<Stats> 
     );
     let runs = compact_runs(runs, &temp.path)?;
     let mut merged = Merge::new(&runs)?;
+    let build_epoch = match options.build_epoch {
+        Some(epoch) => epoch,
+        None => source_commit_epoch(root)?,
+    };
     let metadata = MetadataBuilder::new()
+        .build_epoch(build_epoch)
         .ip_version(6)
         .database_type("firehol-blocklist-ipsets")
         .description(
@@ -607,6 +644,11 @@ pub fn generate(root: &Path, output: &Path, options: &Options) -> Result<Stats> 
     let bytes = writer.finish()?;
     let reader = Reader::from_bytes(&bytes)
         .context("Generated MMDB is invalid; previous release will be preserved")?;
+    ensure!(
+        reader.metadata().build_epoch == build_epoch,
+        "Generated MMDB build_epoch does not match the source commit timestamp"
+    );
+    eprintln!("INFO source_commit_metadata build_epoch={build_epoch}");
     for ip in samples {
         validate_record(&reader.lookup_value(ip)?.to_owned_value())?;
     }

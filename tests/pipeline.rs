@@ -1,9 +1,12 @@
-use firehol_mmdb::{FIELDS, Options, discover, generate, parse_network, validate_record};
+use firehol_mmdb::{
+    FIELDS, Options, discover, generate, parse_network, source_commit_epoch, validate_record,
+};
 use libmaxminddb_rs::{Reader, Value};
 use std::{
     collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
+    process::Command,
     sync::atomic::{AtomicU64, Ordering},
 };
 
@@ -27,6 +30,25 @@ impl Fixture {
     fn output(&self) -> PathBuf {
         self.0.join("output.mmdb")
     }
+    fn git(&self, args: &[&str]) {
+        let result = Command::new("git")
+            .arg("-C")
+            .arg(&self.0)
+            .args(args)
+            .env("GIT_AUTHOR_NAME", "Fixture")
+            .env("GIT_AUTHOR_EMAIL", "fixture@example.invalid")
+            .env("GIT_COMMITTER_NAME", "Fixture")
+            .env("GIT_COMMITTER_EMAIL", "fixture@example.invalid")
+            .env("GIT_AUTHOR_DATE", "2026-10-04T05:49:31+0000")
+            .env("GIT_COMMITTER_DATE", "2026-10-05T09:17:32+0000")
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
     fn generate(&self) -> Vec<u8> {
         generate(
             &self.0,
@@ -35,6 +57,7 @@ impl Fixture {
                 threads: 4,
                 batch_size: 2,
                 queue_size: 1,
+                build_epoch: Some(1_791_191_852),
             },
         )
         .unwrap();
@@ -51,6 +74,40 @@ fn record(reader: &Reader<'_>, ip: &str) -> serde_json::Value {
     let value = reader.lookup_value(ip.parse().unwrap()).unwrap();
     validate_record(&value.to_owned_value()).unwrap();
     value.to_json()
+}
+
+#[test]
+fn source_committer_date_is_stored_and_rebuilds_are_reproducible() {
+    let f = Fixture::new();
+    f.write("a.ipset", "192.0.2.1\n");
+    f.git(&["init", "-q"]);
+    f.git(&["add", "a.ipset"]);
+    f.git(&["commit", "-q", "-m", "source snapshot"]);
+    assert_eq!(source_commit_epoch(&f.0).unwrap(), 1_791_191_852);
+    generate(&f.0, &f.output(), &Options::default()).unwrap();
+    let first = fs::read(f.output()).unwrap();
+    assert_eq!(
+        Reader::from_bytes(&first).unwrap().metadata().build_epoch,
+        1_791_191_852
+    );
+    generate(&f.0, &f.output(), &Options::default()).unwrap();
+    assert_eq!(first, fs::read(f.output()).unwrap());
+}
+
+#[test]
+fn source_timestamp_rejects_parent_git_repositories_and_missing_checkouts() {
+    let f = Fixture::new();
+    assert!(source_commit_epoch(&f.0).is_err());
+    f.write("data/a.ipset", "192.0.2.1\n");
+    f.git(&["init", "-q"]);
+    f.git(&["add", "data/a.ipset"]);
+    f.git(&["commit", "-q", "-m", "parent repository"]);
+    assert!(
+        source_commit_epoch(&f.0.join("data"))
+            .unwrap_err()
+            .to_string()
+            .contains("parent repository")
+    );
 }
 
 #[test]
@@ -203,6 +260,7 @@ fn malformed_input_does_not_replace_output_or_leave_sort_files() {
             threads: 4,
             batch_size: 1,
             queue_size: 1,
+            build_epoch: None,
         },
     )
     .unwrap_err();

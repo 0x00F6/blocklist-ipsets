@@ -217,6 +217,18 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(result[0][1][5], "2026-03-12T07:15:03Z")
             self.assertEqual(result[-1][1][2], "B")
 
+    def test_independent_validation_rejects_a_generation_date_instead_of_source_date(self):
+        from unittest.mock import MagicMock
+        reader = MagicMock()
+        reader.metadata.return_value.database_type = TAG
+        reader.metadata.return_value.build_epoch = 1_791_191_853
+        opener = MagicMock()
+        opener.return_value.__enter__.return_value = reader
+        with patch('validate.source_commit_epoch', return_value=1_791_191_852):
+            with self.assertRaisesRegex(ValueError, "does not match source commit timestamp"):
+                validate('data', 'database.mmdb', open_database=opener)
+        reader.get.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

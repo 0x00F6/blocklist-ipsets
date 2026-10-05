@@ -2,8 +2,10 @@
 from collections import Counter
 import datetime
 import ipaddress
+import json
 from pathlib import Path
 import sys
+import subprocess
 
 FIELDS = ("files", "categories", "maintainers", "maintainer_urls", "source_urls", "source_file_dates", "versions")
 ALIASES = {"attack": "attacks", "spammer": "spam", "proxies": "proxy", "bot": "botnet", "bots": "botnet", "unallocated": "unroutable", "anonymous": "anonymizers", "anonymizer": "anonymizers"}
@@ -61,14 +63,30 @@ def samples(root):
                     budget -= 1
 
 
+def source_commit_epoch(root):
+    checkout = subprocess.check_output(["git", "-C", str(root), "rev-parse", "--show-toplevel"], text=True).strip()
+    if Path(checkout).resolve() != Path(root).resolve():
+        raise ValueError("Source directory must be its own Git repository root")
+    value = subprocess.check_output(["git", "-C", str(root), "show", "--no-patch", "--format=%ct", "HEAD"], text=True).strip()
+    if not value.isascii() or not value.isdecimal():
+        raise ValueError("Invalid source commit timestamp")
+    return int(value)
+
+
 def validate(root, database, open_database=None):
     if open_database is None:
         import maxminddb
         open_database = maxminddb.open_database
     count = 0
     with open_database(str(database)) as reader:
-        if reader.metadata().database_type != "firehol-blocklist-ipsets":
+        metadata = reader.metadata()
+        if metadata.database_type != "firehol-blocklist-ipsets":
             raise ValueError("Unexpected MMDB database type")
+        expected_epoch = source_commit_epoch(root)
+        if metadata.build_epoch != expected_epoch:
+            raise ValueError(f"MMDB build_epoch {metadata.build_epoch} does not match source commit timestamp {expected_epoch}")
+        fields = ("database_type", "description", "ip_version", "languages", "build_epoch", "node_count", "record_size", "binary_format_major_version", "binary_format_minor_version")
+        print("INFO database_metadata " + json.dumps({field: getattr(metadata, field) for field in fields}, sort_keys=True))
         for ip, expected in samples(root):
             # Conventional MMDB IPv4 compatibility / transition aliases cannot represent
             # independent IPv6 identities in these reserved ranges.
