@@ -1,0 +1,105 @@
+name: Sync FireHOL and publish MMDB
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild even if the upstream SHA is already published
+        type: boolean
+        default: false
+  push:
+    branches: [mmdb-pipeline]
+    paths:
+      - 'Cargo.*'
+      - 'rust-toolchain.toml'
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - '.github/workflows/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: firehol-mmdb-publisher
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == '0x00F6/blocklist-ipsets'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+    steps:
+      - name: Checkout pipeline branch
+        uses: actions/checkout@v4
+        with:
+          ref: mmdb-pipeline
+          persist-credentials: false
+      - name: Sync exact upstream mirror and detect unpublished SHA
+        id: sync
+        env:
+          FORCE: ${{ inputs.force || github.event_name == 'push' }}
+        run: |
+          if [ "$FORCE" = 'true' ]; then
+            python3 scripts/sync.py --force
+          else
+            python3 scripts/sync.py
+          fi
+      - name: Checkout immutable source commit
+        if: steps.sync.outputs.changed == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: firehol/blocklist-ipsets
+          ref: ${{ steps.sync.outputs.upstream_sha }}
+          path: data
+          persist-credentials: false
+      - name: Install Rust
+        if: steps.sync.outputs.changed == 'true'
+        run: |
+          rustup update stable --no-self-update
+          rustup component add rustfmt clippy
+      - name: Cache Rust build
+        if: steps.sync.outputs.changed == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-firehol-rust-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'src/**') }}
+      - name: Validate implementation
+        if: steps.sync.outputs.changed == 'true'
+        run: make check
+      - name: Generate and validate complete database
+        if: steps.sync.outputs.changed == 'true'
+        run: |
+          cargo build --release --locked
+          /usr/bin/time -v target/release/firehol-mmdb data dist/firehol-blocklist-ipsets.mmdb
+          sha256sum dist/firehol-blocklist-ipsets.mmdb
+      - name: Independently verify MMDB format
+        if: steps.sync.outputs.changed == 'true'
+        run: |
+          python3 -m pip install --disable-pip-version-check maxminddb
+          python3 scripts/validate.py data dist/firehol-blocklist-ipsets.mmdb
+      - name: Replace the single rolling release
+        if: steps.sync.outputs.changed == 'true'
+        env:
+          UPSTREAM_SHA: ${{ steps.sync.outputs.upstream_sha }}
+        run: python3 scripts/publish.py dist/firehol-blocklist-ipsets.mmdb "$UPSTREAM_SHA"
+      - name: Run summary
+        if: always()
+        env:
+          UPSTREAM_SHA: ${{ steps.sync.outputs.upstream_sha }}
+          CHANGED: ${{ steps.sync.outputs.changed }}
+        run: |
+          {
+            echo '### FireHOL MMDB'
+            echo "Upstream commit: $UPSTREAM_SHA"
+            echo "Build required: $CHANGED"
+            echo '[Rolling release](https://github.com/0x00F6/blocklist-ipsets/releases/tag/firehol-blocklist-ipsets)'
+          } >> "$GITHUB_STEP_SUMMARY"
