@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/firehol-mmdb.png" alt="FireHOL MMDB network shield logo" width="280">
+</p>
+
 # 🛡️ FireHOL Blocklist IPsets MMDB
 
 An hourly mirror of [firehol/blocklist-ipsets](https://github.com/firehol/blocklist-ipsets) and a parallel Rust MMDB generator powered by [libmaxminddb-rs](https://github.com/0x00F6/libmaxminddb-rs).
@@ -6,6 +10,7 @@ An hourly mirror of [firehol/blocklist-ipsets](https://github.com/firehol/blockl
 
 ## Contents
 
+- [Project website](#project-website)
 - [Download](#download)
 - [Compression and extraction](#compression-and-extraction)
 - [Branches and files](#branches-and-files)
@@ -17,6 +22,12 @@ An hourly mirror of [firehol/blocklist-ipsets](https://github.com/firehol/blockl
 - [Validation](#validation)
 - [Contributing](#contributing)
 - [Source licensing](#source-licensing)
+
+## Project website
+
+🌐 [FireHOL MMDB project site](https://0x00f6.github.io/blocklist-ipsets/) — a single-page English overview with downloads, pipeline details, data schema, and live release sizes and SHA-256 hashes.
+
+🔎 [FireHOL IP Lists](https://iplists.firehol.org/) — explore the upstream feeds, categories, maintainers, and list overlaps.
 
 ## Download
 
@@ -53,6 +64,8 @@ The verified production archive for source commit `3417de0f1f36025827c9a2752c867
 | Path | Role |
 | --- | --- |
 | `.github/workflows/hourly.yml` | Hourly synchronization, generation, validation, and publication |
+| `.github/workflows/pages.yml` | Deploy the project website to GitHub Pages |
+| `docs/` | Static single-page project website and shared logo |
 | `src/` | Rust parser and MMDB generator |
 | `scripts/` | GitHub API client, mirror synchronization, publication, archive creation, and independent validation |
 | `tests/` | Rust integration tests and Python workflow and archive tests |

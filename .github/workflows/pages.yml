@@ -1,0 +1,63 @@
+name: Publish FireHOL MMDB project site
+
+on:
+  push:
+    branches: [mmdb-pipeline]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: firehol-project-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.repository == '0x00F6/blocklist-ipsets'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout project site
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload static site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Verify published project page
+        env:
+          SITE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          python3 - <<'PYVERIFY'
+          import os, time, urllib.request
+          base = os.environ["SITE_URL"]
+          for attempt in range(12):
+              try:
+                  with urllib.request.urlopen(base, timeout=20) as response:
+                      html = response.read().decode()
+                  assert "IP intelligence." in html and "iplists.firehol.org" in html
+                  for path in ("app.js", "style.css", "assets/firehol-mmdb.png"):
+                      with urllib.request.urlopen(base + path, timeout=20) as response:
+                          assert response.status == 200 and response.read(1)
+                  print(f"INFO project_site_verified url={base} logo=true download_links=true")
+                  break
+              except Exception:
+                  if attempt == 11:
+                      raise
+                  time.sleep(5)
+          PYVERIFY

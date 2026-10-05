@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#09090c">
+  <meta name="description" content="FireHOL IP reputation in one IPv4 and IPv6 MMDB. An hourly source mirror, preserved source metadata, verified gzip-9 downloads, and a parallel Rust generator.">
+  <title>FireHOL MMDB — IP intelligence, one database</title>
+  <link rel="icon" href="assets/firehol-mmdb.png" type="image/png">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+  <aside class="sidebar">
+    <a href="#overview" class="brand" aria-label="FireHOL MMDB home"><img src="assets/firehol-mmdb.png" width="44" height="44" alt=""><span>FIREHOL<span class="brand-sub">BLOCKLIST / MMDB</span></span></a>
+    <div class="nav-caption">PROJECT CONSOLE</div>
+    <nav aria-label="Project sections">
+      <a href="#overview" data-view="overview"><span class="nav-icon">⌘</span> Overview <span class="nav-number">01</span></a>
+      <a href="#downloads" data-view="downloads"><span class="nav-icon">↓</span> Downloads <span class="nav-number">02</span></a>
+      <a href="#pipeline" data-view="pipeline"><span class="nav-icon">⤳</span> Pipeline <span class="nav-number">03</span></a>
+      <a href="#schema" data-view="schema"><span class="nav-icon">{ }</span> Data schema <span class="nav-number">04</span></a>
+    </nav>
+    <div class="sidebar-source"><span class="nav-caption">SOURCE INTELLIGENCE</span><a href="https://iplists.firehol.org/" target="_blank" rel="noopener noreferrer">FireHOL IP Lists <span>↗</span></a><a href="https://github.com/firehol/blocklist-ipsets" target="_blank" rel="noopener noreferrer">Upstream feeds <span>↗</span></a><a href="https://github.com/0x00F6/blocklist-ipsets" target="_blank" rel="noopener noreferrer">GitHub repository <span>↗</span></a></div>
+    <div class="sidebar-bottom"><span class="signal-dot"></span> HOURLY SOURCE SYNC<span class="tiny">Rust powered · IPv4 + IPv6</span></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><div><span class="top-path">0x00F6 /</span> blocklist-ipsets <span class="tag">MMDB</span></div><a href="https://github.com/0x00F6/blocklist-ipsets/releases/tag/firehol-blocklist-ipsets" target="_blank" rel="noopener noreferrer">Rolling release <span>↗</span></a></header>
+    <main id="content">
+      <section id="overview" class="view" aria-labelledby="overview-title">
+        <div class="hero">
+          <div class="hero-copy"><div class="eyebrow"><span class="signal-dot"></span> OPEN SOURCE / IP REPUTATION</div><h1 id="overview-title">IP intelligence.<br><span>One database.</span></h1><p class="lead">FireHOL blocklists, compiled into a single MMDB. Look up IPv4 and IPv6 addresses while keeping the sources behind every match.</p><div class="hero-actions"><a class="button primary" href="#downloads">Get the database <span>↓</span></a><a class="button ghost" href="https://iplists.firehol.org/" target="_blank" rel="noopener noreferrer">Explore FireHOL <span>↗</span></a></div><div class="hero-notes"><span>RUST GENERATOR</span><span>DEEP MERGE</span><span>GZIP LEVEL 9</span></div></div>
+          <div class="hero-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="art-coordinate coordinate-top">THREAT INTELLIGENCE / GLOBAL</div><img src="assets/firehol-mmdb.png" width="1254" height="1254" alt="" fetchpriority="high"><div class="art-coordinate coordinate-bottom">FIREWALL · NETWORK · REPUTATION</div></div>
+        </div>
+        <div class="metrics" aria-label="Verified production snapshot statistics"><div><span class="metric-label">SOURCE FILES</span><strong>149</strong><span>.ipset + .netset</span></div><div><span class="metric-label">CONTRIBUTIONS</span><strong>7.99<span>M</span></strong><span>Duplicates preserved</span></div><div><span class="metric-label">STORED PREFIXES</span><strong>3.83<span>M</span></strong><span>IPv4 + IPv6 networks</span></div><div><span class="metric-label">SCHEDULE</span><strong>Hourly</strong><span>At minute 17 UTC</span></div></div>
+        <p class="measurement-note">Counts describe the verified 05 Oct 2026 source snapshot; they are not live counters. Scheduled runs can be delayed by GitHub.</p>
+        <div class="section-heading"><div><span class="eyebrow">01 / BUILT FOR LOOKUPS</span><h2>Context behind every IP.</h2></div><span class="section-code">[ provenance preserved ]</span></div>
+        <div class="feature-grid"><article class="feature"><span class="feature-icon">{ }</span><h3>Source-aware records</h3><p>Aligned arrays keep each list, category, maintainer, URL and source date together. Repeated contributions remain intact.</p><a href="#schema">Inspect the schema <span>→</span></a></article><article class="feature"><span class="feature-icon">⤳</span><h3>Overlaps included</h3><p>More-specific networks inherit broader source contributions. Deep merging keeps the full source context for a match.</p><a href="#pipeline">Follow the pipeline <span>→</span></a></article><article class="feature"><span class="feature-icon">✓</span><h3>Verified before upload</h3><p>Rust and independent MaxMind readers validate the MMDB. The archive is decompressed and checked against its original SHA-256.</p><a href="#downloads">Download verified files <span>→</span></a></article></div>
+        <div class="source-banner"><div><span class="eyebrow">UPSTREAM / FIREHOL</span><h3>The intelligence starts with the lists.</h3><p>Explore list categories, maintainers, update history and overlaps on the FireHOL IP Lists website.</p></div><a class="button ghost" href="https://iplists.firehol.org/" target="_blank" rel="noopener noreferrer">iplists.firehol.org <span>↗</span></a></div>
+      </section>
+      <section id="downloads" class="view" aria-labelledby="downloads-title" hidden>
+        <div class="page-heading"><span class="eyebrow">02 / DATABASE DISTRIBUTION</span><h1 id="downloads-title">Two files.<br><span>One source snapshot.</span></h1><p>Choose the original database or download the smaller gzip-9 archive. Stable URLs always point to the rolling release.</p></div>
+        <div class="release-strip"><span class="signal-dot"></span><span id="release-status" role="status">Verified snapshot · 05 Oct 2026</span><a id="release-link" href="https://github.com/0x00F6/blocklist-ipsets/releases/tag/firehol-blocklist-ipsets" target="_blank" rel="noopener noreferrer">Release notes ↗</a></div>
+        <div class="download-grid"><article class="download-card"><div class="file-heading"><span class="file-icon">DB</span><span class="tag">READY TO READ</span></div><h2>Original MMDB</h2><p>The database for direct use with compatible MaxMind DB readers.</p><strong class="download-size" id="mmdb-size">136.51 <small>MB</small></strong><div class="file-name">firehol-blocklist-ipsets.mmdb</div><a class="button primary" id="mmdb-download" href="https://github.com/0x00F6/blocklist-ipsets/releases/download/firehol-blocklist-ipsets/firehol-blocklist-ipsets.mmdb">Download MMDB <span>↓</span></a><div class="checksum"><span>SHA-256 <button class="copy-text" data-copy-target="mmdb-sha" aria-label="Copy MMDB SHA-256">COPY</button></span><code id="mmdb-sha">164d9e105c3acbd0ab19c39987fe688df4dc88dc376faa55bc4a9bb52300cb7f</code></div></article>
+        <article class="download-card recommended"><div class="file-heading"><span class="file-icon">GZ</span><span class="tag red-tag">SMALLER DOWNLOAD</span></div><h2>Compressed archive</h2><p>Maximum gzip level 9. Contains only the same validated MMDB file.</p><strong class="download-size" id="archive-size">53.60 <small>MB</small></strong><div class="file-name">firehol-blocklist-ipsets.mmdb.tar.gz</div><a class="button primary" id="archive-download" href="https://github.com/0x00F6/blocklist-ipsets/releases/download/firehol-blocklist-ipsets/firehol-blocklist-ipsets.mmdb.tar.gz">Download tar.gz <span>↓</span></a><div class="checksum"><span>SHA-256 <button class="copy-text" data-copy-target="archive-sha" aria-label="Copy archive SHA-256">COPY</button></span><code id="archive-sha">f07d6f17e09d31b69f3c25e1f80c2e0deb14d3d7c59de63293dbc2b85dc2f8e9</code></div></article></div>
+        <div class="compression-panel"><div><span class="eyebrow">LESS TO TRANSFER</span><strong id="compression-saving">60.74% smaller</strong><p id="compression-bytes">82.91 MB saved per download · decimal MB</p></div><div class="size-bars" aria-label="File size comparison"><div><span>MMDB</span><div class="bar-track"><div class="bar raw"></div></div><span id="raw-bar-label">136.51 MB</span></div><div><span>tar.gz</span><div class="bar-track"><div class="bar compressed" id="compressed-bar"></div></div><span id="gz-bar-label">53.60 MB</span></div></div></div>
+        <div class="section-heading"><div><span class="eyebrow">TERMINAL / QUICK START</span><h2>Download. Extract. Read.</h2></div></div>
+        <div class="terminal"><div class="terminal-title"><span class="terminal-dots">● ● ●</span> shell / download <button data-copy-target="download-command">COPY</button></div><pre><code id="download-command">curl -fL --retry 3 -o firehol-blocklist-ipsets.mmdb.tar.gz \
+  https://github.com/0x00F6/blocklist-ipsets/releases/download/firehol-blocklist-ipsets/firehol-blocklist-ipsets.mmdb.tar.gz
+tar -xzf firehol-blocklist-ipsets.mmdb.tar.gz</code></pre></div>
+        <div class="terminal"><div class="terminal-title"><span class="terminal-dots">● ● ●</span> python / lookup <button data-copy-target="lookup-command">COPY</button></div><pre><code id="lookup-command"># Install once: python3 -m pip install maxminddb
+import maxminddb
+
+with maxminddb.open_database("firehol-blocklist-ipsets.mmdb") as db:
+    record = db.get("1.1.1.1")
+    print(record)  # Source arrays if listed; None if no match.</code></pre></div>
+        <div class="detail-grid"><article><h3>Snapshot date, not build time</h3><p><code>build_epoch</code> is the committer timestamp of the exact FireHOL source commit.</p><dl><dt>Source date (UTC)</dt><dd id="source-date">2026-10-05 09:17:32 UTC</dd><dt>build_epoch</dt><dd id="build-epoch">1791191852</dd><dt>Source commit</dt><dd><a id="source-commit" href="https://github.com/0x00F6/blocklist-ipsets/commit/3417de0f1f36025827c9a2752c8672e2c5fce097" target="_blank" rel="noopener noreferrer">3417de0f1f36 ↗</a></dd></dl></article><article><h3>One rolling release</h3><p>Both uploaded files are replaced on successful publication. GitHub's automatic source-code archives contain repository sources; use the MMDB download buttons above for the generated database.</p><p id="release-note" class="measurement-note">Showing the last verified snapshot. Live release details are requested when this page loads.</p></article></div>
+      </section>
+      <section id="pipeline" class="view" aria-labelledby="pipeline-title" hidden>
+        <div class="page-heading"><span class="eyebrow">03 / SOURCE TO DATABASE</span><h1 id="pipeline-title">Traceable inputs.<br><span>Verified output.</span></h1><p>An hourly GitHub Actions workflow mirrors FireHOL, builds unpublished snapshots and publishes both validated downloads.</p></div>
+        <div class="pipeline-flow"><article><span class="step-number">01</span><div><h2>Mirror the upstream commit</h2><p><code>main</code> is an exact commit-level mirror of FireHOL's <code>master</code>. The generator checks out the verified immutable SHA. Pipeline code lives on the default <code>mmdb-pipeline</code> branch.</p></div><span class="step-tag">SOURCE</span></article><article><span class="step-number">02</span><div><h2>Parse in parallel</h2><p>Rayon parses <code>.ipset</code> and <code>.netset</code> files recursively. <code>*_country</code> directories, hidden directories and symlinks are excluded. Bare addresses become /32 or /128.</p></div><span class="step-tag">RUST</span></article><article><span class="step-number">03</span><div><h2>Preserve the contributions</h2><p>Batched external sorting and explicit ancestor propagation retain overlapping sources. A single libmaxminddb-rs writer uses <code>MergeStrategy::DeepMerge</code> with aligned arrays and duplicates.</p></div><span class="step-tag">MERGE</span></article><article><span class="step-number">04</span><div><h2>Verify, compress and publish</h2><p>Rust and independent MaxMind readers check the database and source timestamp. The gzip-9 archive passes a CRC and SHA-256 round trip. Both uploaded files must be confirmed before publication is complete.</p></div><span class="step-tag">RELEASE</span></article></div>
+        <div class="detail-grid"><article><h3>Retries that follow publication</h3><p>An unchanged source skips compilation only when both assets exist and publication is complete. Missing assets or interrupted uploads trigger another build, including a failed forced rebuild of the same commit.</p><a class="inline-link" href="https://github.com/0x00F6/blocklist-ipsets/actions/workflows/hourly.yml" target="_blank" rel="noopener noreferrer">Inspect GitHub Actions ↗</a></article><article><h3>Measured on a real snapshot</h3><p>The 05 Oct 2026 snapshot passed <strong>866 independent lookups</strong>. The original production generation took 4.77 seconds with 905,268 KiB peak resident memory. Measurements depend on the runner and input data.</p><p>The final writer trie is in memory. Total memory grows with distinct prefixes and metadata combinations.</p></article></div>
+      </section>
+      <section id="schema" class="view" aria-labelledby="schema-title" hidden>
+        <div class="page-heading"><span class="eyebrow">04 / RECORD PROVENANCE</span><h1 id="schema-title">Every source.<br><span>Kept in context.</span></h1><p>Record fields are parallel arrays. Values at the same index belong to the same contribution, including repeated sources.</p></div>
+        <div class="terminal"><div class="terminal-title"><span class="terminal-dots">● ● ●</span> illustrative record / not a live lookup <button data-copy-target="record-example">COPY</button></div><pre><code id="record-example">{
+  "files": ["feodo.ipset", "ipsum_7.ipset"],
+  "categories": ["malware", "abuse"],
+  "maintainers": ["Abuse.ch", "stamparm"],
+  "maintainer_urls": ["https://feodotracker.abuse.ch/", ""],
+  "source_urls": [
+    "https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.txt",
+    ""
+  ],
+  "source_file_dates": ["2026-03-12T07:15:03Z", ""],
+  "versions": ["549", ""]
+}</code></pre></div>
+        <div class="table-wrap"><table><caption>Record fields</caption><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody><tr><td><code>files</code></td><td>Contributing source file names</td></tr><tr><td><code>categories</code></td><td>Canonical categories such as malware, abuse, botnet and spam</td></tr><tr><td><code>maintainers</code></td><td>Source maintainer names</td></tr><tr><td><code>maintainer_urls</code></td><td>Maintainer website URLs</td></tr><tr><td><code>source_urls</code></td><td>Original feed URLs</td></tr><tr><td><code>source_file_dates</code></td><td>Source header dates; recognized UTC dates normalized to ISO 8601</td></tr><tr><td><code>versions</code></td><td>Source header version values</td></tr></tbody></table></div>
+        <div class="detail-grid"><article><h3>Alignment is part of the format</h3><p>Missing optional metadata uses an empty string. Duplicates remain in place, and update frequency is never stored. Array ordering is deterministic.</p></article><article><h3>Global MMDB metadata</h3><p><code>database_type: firehol-blocklist-ipsets</code><br><code>ip_version: 6</code> (IPv4 + IPv6)<br><code>languages: ["en"]</code><br><code>binary format: 2.0</code></p><p>Node count and record size are computed by the writer. <code>build_epoch</code> follows the source commit's committer date.</p></article></div>
+        <div class="source-banner"><div><span class="eyebrow">BUILD IT YOURSELF</span><h3>Parallel Rust. Open source.</h3><p>Find the full generator, local build instructions and contributor guidance in the repository.</p></div><a class="button ghost" href="https://github.com/0x00F6/blocklist-ipsets/blob/mmdb-pipeline/README.md" target="_blank" rel="noopener noreferrer">Read the documentation <span>↗</span></a></div>
+      </section>
+      <noscript><style>.view[hidden]{display:block!important}.view{margin-bottom:72px}</style><p class="measurement-note">JavaScript is disabled. All sections are shown; download links remain available.</p></noscript>
+    </main>
+    <footer><div><span class="footer-brand">FIREHOL <span>MMDB</span></span><span>Built with Rust · Published on GitHub</span></div><div><a href="https://iplists.firehol.org/" target="_blank" rel="noopener noreferrer">FireHOL IP Lists ↗</a><a href="https://github.com/0x00F6/libmaxminddb-rs" target="_blank" rel="noopener noreferrer">libmaxminddb-rs ↗</a><a href="https://github.com/0x00F6/blocklist-ipsets" target="_blank" rel="noopener noreferrer">Source ↗</a></div><p>Blocklist contents remain governed by their original maintainers' licensing notices, preserved with the source snapshot on main.</p></footer>
+  </div>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

@@ -4,7 +4,7 @@
 
 - Keep `main` an exact commit-level mirror of `firehol/blocklist-ipsets` branch `master`. Synchronization may force-update only `main`.
 - Keep `mmdb-pipeline` as the default branch. All generator code, tests, workflow configuration, `README.md`, and this file live there.
-- Keep `mmdb-pipeline` limited to `.github/workflows/hourly.yml`, `.gitignore`, `AGENTS.md`, `README.md`, `Makefile`, Cargo/toolchain files, `src/`, `scripts/`, and `tests/`. Do not commit upstream data, country directories, build outputs, caches, or standalone validation reports.
+- Keep `mmdb-pipeline` limited to `.github/workflows/hourly.yml`, `.github/workflows/pages.yml`, `docs/`, `.gitignore`, `AGENTS.md`, `README.md`, `Makefile`, Cargo/toolchain files, `src/`, `scripts/`, and `tests/`. Do not commit upstream data, country directories, build outputs, caches, or standalone validation reports.
 - Preserve the README table of contents, branch documentation, download links, and concise emoji cues when updating documentation. Write technical documentation and logs in English.
 
 ## Synchronization and build inputs
@@ -40,3 +40,10 @@
 - Log detailed English messages on one line, with file/line context and actionable errors. Include the synchronized branch, source SHA, input counts, output size, and validation result where relevant.
 - Run `make check` before publishing code changes. Keep meaningful coverage for overlap propagation, error cancellation, recursive exclusions, metadata alignment, mirror creation, exact-SHA verification, publication retries after partial two-file uploads, deterministic archive headers, corrupt gzip rejection, and decompression integrity.
 - After workflow or synchronization changes, verify a complete GitHub Actions run using this fork's `main` source commit. Preserve the unchanged-source skip behavior.
+
+## Project website
+
+- Maintain the English static single-page site in `docs/`, with the shared network-shield logo centered at the top of the README. Preserve the dark red terminal design, keyboard access, responsive layout, and reduced-motion support.
+- Keep both stable download links, repository links, and `https://iplists.firehol.org/` available. Label dated benchmark counts and fallback metadata explicitly; update release sizes and SHA-256 hashes from complete publications only.
+- Deploy through `.github/workflows/pages.yml` from `mmdb-pipeline`; never place site files on the `main` source mirror. The site workflow must have read-only contents access, Pages write, and OIDC token write permissions.
+- Verify desktop and mobile views, hash navigation, download links, clipboard actions, and release API fallback behavior before publishing website changes.
