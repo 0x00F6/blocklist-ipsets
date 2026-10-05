@@ -27,6 +27,8 @@ class FakeGitHub:
     def __init__(self, existing=True):
         self.current = release() if existing else None
         self.tag = {"object": {"sha": OLD}} if existing else None
+        self.mirror = OLD
+        self.mirror_mismatch = False
         self.calls = []
         self.repo = {"fork": True, "parent": {"full_name": "firehol/blocklist-ipsets"}, "default_branch": "mmdb-pipeline"}
         self.other = [{"id": 2, "tag_name": "old"}]
@@ -35,11 +37,21 @@ class FakeGitHub:
         self.calls.append((method, path, data))
         if path.endswith("/branches/master"):
             return {"commit": {"sha": SHA}}
+        if path.endswith("/branches/main"):
+            return {"commit": {"sha": OLD if self.mirror_mismatch else self.mirror}}
+        if method == "GET" and path.endswith("/git/ref/heads/main"):
+            return {"object": {"sha": self.mirror}} if self.mirror else None
+        if method == "PATCH" and path.endswith("/git/refs/heads/main"):
+            self.mirror = data["sha"]
+            return {"object": {"sha": self.mirror}}
         if method == "GET" and path == "/repos/" + self.repository:
             return copy.deepcopy(self.repo)
         if method == "GET" and "/git/ref/tags/" in path:
             return copy.deepcopy(self.tag)
         if method == "POST" and path.endswith("/git/refs"):
+            if data["ref"] == "refs/heads/main":
+                self.mirror = data["sha"]
+                return {"object": {"sha": self.mirror}}
             self.tag = {"object": {"sha": data["sha"]}}
             return copy.deepcopy(self.tag)
         if method == "PATCH" and "/git/refs/tags/" in path:
@@ -77,11 +89,29 @@ class WorkflowTests(unittest.TestCase):
         item["body"] += "suffix"
         self.assertTrue(needs_build(item, SHA))
 
-    def test_sync_forces_only_master_and_reports_last_published_sha(self):
+    def test_sync_forces_only_main_and_verifies_the_upstream_commit(self):
         api = FakeGitHub()
         self.assertEqual(run(api), (SHA, True))
         patches = [c for c in api.calls if c[0] == "PATCH"]
-        self.assertEqual(patches, [("PATCH", "/repos/0x00F6/blocklist-ipsets/git/refs/heads/master", {"sha": SHA, "force": True})])
+        self.assertEqual(patches, [("PATCH", "/repos/0x00F6/blocklist-ipsets/git/refs/heads/main", {"sha": SHA, "force": True})])
+        self.assertEqual(api.mirror, SHA)
+
+    def test_missing_main_is_created_from_the_exact_upstream_commit(self):
+        api = FakeGitHub()
+        api.mirror = None
+        self.assertEqual(run(api), (SHA, True))
+        self.assertEqual(api.mirror, SHA)
+        self.assertIn(("POST", "/repos/0x00F6/blocklist-ipsets/git/refs", {"ref": "refs/heads/main", "sha": SHA}), api.calls)
+        self.assertFalse(any(c[0] == "PATCH" for c in api.calls))
+
+    def test_mismatched_main_fails_before_emitting_outputs_or_pruning(self):
+        api = FakeGitHub()
+        api.mirror_mismatch = True
+        outputs = []
+        with self.assertRaisesRegex(RuntimeError, "Mirror verification failed"):
+            run(api, emit=lambda *args: outputs.append(args))
+        self.assertEqual(outputs, [])
+        self.assertFalse(any(c[0] == "DELETE" for c in api.calls))
 
     def test_sync_checks_parent_and_default_branch_before_mutation(self):
         for wrong in ({"fork": False}, {"parent": {"full_name": "wrong/repo"}}, {"default_branch": "master"}):

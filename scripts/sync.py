@@ -5,6 +5,7 @@ from github_api import GitHub
 
 TAG = "firehol-blocklist-ipsets"
 ASSET = TAG + ".mmdb"
+MIRROR = "main"
 
 
 def needs_build(release, upstream_sha, force=False):
@@ -22,8 +23,15 @@ def run(api, force=False, emit=None):
     if repo["default_branch"] != "mmdb-pipeline":
         raise RuntimeError("Set mmdb-pipeline as the default branch before enabling the schedule")
     sha = api.request("GET", "/repos/firehol/blocklist-ipsets/branches/master")["commit"]["sha"]
-    # Force only the mirror. Workflow code is never reset.
-    api.request("PATCH", f"/repos/{api.repository}/git/refs/heads/master", {"sha": sha, "force": True})
+    # Force only main. Workflow code stays on the separate default branch.
+    reference = api.request("GET", f"/repos/{api.repository}/git/ref/heads/{MIRROR}", missing_ok=True)
+    if reference is None:
+        api.request("POST", f"/repos/{api.repository}/git/refs", {"ref": f"refs/heads/{MIRROR}", "sha": sha})
+    else:
+        api.request("PATCH", f"/repos/{api.repository}/git/refs/heads/{MIRROR}", {"sha": sha, "force": True})
+    mirrored_sha = api.request("GET", f"/repos/{api.repository}/branches/{MIRROR}")["commit"]["sha"]
+    if mirrored_sha != sha:
+        raise RuntimeError(f"Mirror verification failed: {MIRROR} points to {mirrored_sha}, expected {sha}; retry synchronization")
     release = api.request("GET", f"/repos/{api.repository}/releases/tags/{TAG}", missing_ok=True)
     changed = needs_build(release, sha, force)
     if not changed:
@@ -34,7 +42,7 @@ def run(api, force=False, emit=None):
         for extra in release.get("assets", []):
             if extra["name"] != ASSET:
                 api.request("DELETE", f"/repos/{api.repository}/releases/assets/{extra['id']}")
-    print(f"INFO mirror_synced upstream_sha={sha} build_required={str(changed).lower()}")
+    print(f"INFO mirror_synced branch={MIRROR} upstream_sha={sha} build_required={str(changed).lower()}")
     if emit:
         emit("upstream_sha", sha)
         emit("changed", str(changed).lower())

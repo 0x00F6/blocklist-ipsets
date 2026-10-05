@@ -1,36 +1,77 @@
-# FireHOL Blocklist IPsets MMDB
+# 🛡️ FireHOL Blocklist IPsets MMDB
 
-An hourly mirror of [firehol/blocklist-ipsets](https://github.com/firehol/blocklist-ipsets) and a parallel Rust generator using [libmaxminddb-rs](https://github.com/0x00F6/libmaxminddb-rs).
+An hourly mirror of [firehol/blocklist-ipsets](https://github.com/firehol/blocklist-ipsets) and a parallel Rust MMDB generator powered by [libmaxminddb-rs](https://github.com/0x00F6/libmaxminddb-rs).
 
-**One rolling release, one database:** `firehol-blocklist-ipsets.mmdb`.
+🚀 **One rolling release, one uploaded database:** `firehol-blocklist-ipsets.mmdb`.
 
-```text
-https://github.com/0x00F6/blocklist-ipsets/releases/download/firehol-blocklist-ipsets/firehol-blocklist-ipsets.mmdb
-```
+## Contents
 
-The download becomes available after the first successful workflow publication.
+- [Download](#download)
+- [Branches and files](#branches-and-files)
+- [Automation](#automation)
+- [Generation](#generation)
+- [Record schema](#record-schema)
+- [Local use](#local-use)
+- [Validation](#validation)
+- [Contributing](#contributing)
+- [Source licensing](#source-licensing)
 
-## Branches
+## Download
+
+📦 [Download the latest MMDB](https://github.com/0x00F6/blocklist-ipsets/releases/download/firehol-blocklist-ipsets/firehol-blocklist-ipsets.mmdb) · [View the rolling release](https://github.com/0x00F6/blocklist-ipsets/releases/tag/firehol-blocklist-ipsets)
+
+The download URL stays the same across updates. GitHub additionally provides its automatic source-code archives.
+
+## Branches and files
 
 | Branch | Purpose |
 | --- | --- |
-| `master` | Exact FireHOL upstream mirror, force-synchronized each run |
-| `mmdb-pipeline` | Default branch containing this generator and its scheduled workflow |
+| `main` | Exact copy of upstream FireHOL `master`, force-synchronized each workflow run |
+| `mmdb-pipeline` | Default branch containing the generator, tests, documentation, and scheduled workflow |
 
-The workflow must live on a separate default branch so forcing `master` cannot delete it. The scheduler runs at minute 17 of every hour, in UTC. GitHub may delay scheduled runs. `workflow_dispatch` supports a forced rebuild, and pushes that change the pipeline also rebuild it.
+🧹 `mmdb-pipeline` contains no FireHOL data snapshots or country directories. Input files and upstream documentation belong to `main`; the workflow checks out its verified source commit into `data/` only when a build is needed.
+
+| Path | Role |
+| --- | --- |
+| `.github/workflows/hourly.yml` | Hourly synchronization, generation, validation, and publication |
+| `src/` | Rust parser and MMDB generator |
+| `scripts/` | GitHub API client, mirror synchronization, publication, and independent validation |
+| `tests/` | Rust integration tests and Python workflow tests |
+| `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml` | Dependencies and Rust toolchain configuration |
+| `Makefile`, `.gitignore` | Build commands and generated-file exclusions |
+| `README.md`, `AGENTS.md` | User documentation and contributor instructions |
+
+## Automation
+
+⏱️ The schedule is `17 * * * *`: every hour at minute 17, in UTC. GitHub can delay scheduled runs.
+
+`mmdb-pipeline` stays the default branch so GitHub discovers the schedule. The workflow runs there and uses the synchronized data commit from `main` for generation.
+
+| Trigger | Behavior |
+| --- | --- |
+| Hourly schedule | Synchronize `main`; build only if the current upstream SHA has not been successfully published |
+| Manual run | Same behavior; enable **Rebuild even if the upstream SHA is already published** to force a rebuild |
+| Pipeline code change | Synchronize `main` and rebuild to validate and publish the updated generator |
+| README or AGENTS update | Documentation update without an automatic rebuild |
+
+Run it manually from [GitHub Actions](https://github.com/0x00F6/blocklist-ipsets/actions/workflows/hourly.yml): select **Run workflow**, choose `mmdb-pipeline`, and optionally enable the rebuild checkbox.
+
+🔐 The workflow uses the built-in `GITHUB_TOKEN` with `contents: write`. Branch rules must permit forced updates to `main`, tag rules must permit moving `firehol-blocklist-ipsets`, and the release must remain mutable. Repository permissions must allow GitHub Actions.
+
+A failed build is retried even when `main` already matches upstream. A missing or incomplete asset also triggers a rebuild. Unchanged-source runs still enforce the one-release and one-uploaded-asset policy.
 
 ## Generation
 
-1. Fetch the current FireHOL `master` SHA and force-update the fork's `master` reference.
+1. Fetch the current FireHOL `master` SHA and force-update this fork's `main` reference, creating it if missing.
 2. Compare that SHA with the last **successfully published** rolling release and check that the asset is complete. Skip compilation when both match. Missing releases or interrupted builds are retried.
-3. Check out the exact source SHA, independent of subsequent upstream changes.
+3. Verify that `main` points to that SHA, then check out that exact commit from this fork into `data/`. Subsequent branch updates cannot change the build inputs.
 4. Walk `.ipset` and `.netset` files recursively. Prune every directory ending with `_country`; skip hidden directories and symlinks.
 5. Parse files in parallel with Rayon, largest first. Normalize bare IPv4 to `/32` and IPv6 to `/128`. Preserve CIDRs and mask host bits. Parse headers, inline comments, CRLF, BOM and metadata changes within files. Invalid addresses fail with file/line context.
 6. Send batches of 32,768 compact entries through a bounded standard-library channel. Sort each batch to disk, then merge runs with a maximum fan-in of 48. No complete input vector or globally locked writer is required.
 7. Traverse sorted networks with a prefix stack. Include all ancestor contributions in more-specific records: the library's `DeepMerge` only merges values at an identical prefix, so this propagation is explicit.
 8. Build aligned arrays using the actual `MergeStrategy::DeepMerge` writer. Duplicate values remain present. Cache up to 4,096 reusable merged payloads; this cache does not remove duplicate entries. A single writer builds the final IPv4/IPv6 MMDB.
 9. Validate the generated MMDB with the Rust reader and sampled source contributions with MaxMind's independent Python reader. Only validated output replaces the local file.
-10. Replace the stable release asset, confirm the upload, update the tag and remove other releases. Mark the source SHA completed only after those operations succeed. Build failures preserve the prior release; an interrupted asset replacement can temporarily leave the download unavailable and is retried on the next run.
+10. Reuse an existing draft if publication was interrupted, upload to its exact release ID, confirm the asset, create or update the tag, and remove other releases. Mark the source SHA completed only after those operations succeed. Build failures preserve the prior release; an interrupted asset replacement can temporarily leave the download unavailable and is retried on the next run.
 
 The channel, sort runs, readers and payload cache are bounded. The final libmaxminddb-rs trie is in memory, so peak memory still grows with the number of distinct prefixes and metadata combinations. No claim of bounded total memory is made.
 
@@ -58,10 +99,12 @@ MMDB conventionally reserves `::/96` for IPv4 and supports IPv6 transition alias
 
 ## Local use
 
-Rust stable >= 1.98.1, Python 3, Git, and enough disk/RAM for the FireHOL snapshot are required. The writer is pinned to commit `9834fb987a5ec3f0585193a5f0fee8d1aa779a8a`.
+🦀 Requires Rust stable >= 1.98.1, Python 3, Git, and sufficient disk/RAM for the source snapshot. The writer is pinned to commit `9834fb987a5ec3f0585193a5f0fee8d1aa779a8a`.
 
 ```bash
-git clone --depth=1 https://github.com/firehol/blocklist-ipsets.git data
+git clone --depth=1 --single-branch --branch=mmdb-pipeline https://github.com/0x00F6/blocklist-ipsets.git firehol-mmdb
+cd firehol-mmdb
+git clone --depth=1 --single-branch --branch=main https://github.com/0x00F6/blocklist-ipsets.git data
 make check
 make generate DATA=data OUTPUT=dist/firehol-blocklist-ipsets.mmdb
 python3 -m pip install maxminddb
@@ -70,20 +113,27 @@ python3 scripts/validate.py data dist/firehol-blocklist-ipsets.mmdb
 
 Set `FIREHOL_PARSER_THREADS` to override available CPU count. The Rust API also exposes batch size and queue capacity for testing and embedding.
 
-## Install this pipeline
-
-Authenticate GitHub CLI as `0x00F6` with repository, Actions and workflow write access. From this directory:
-
-```bash
-bash scripts/bootstrap.sh
-```
-
-The script creates or verifies the fork, publishes `mmdb-pipeline`, makes it the default branch, enables Actions and dispatches the first build. It stops if that branch already exists so existing pipeline changes cannot be overwritten. The workflow uses only its built-in `GITHUB_TOKEN` with `contents: write`; no personal access token is stored in the repository. Branch/tag rules must allow the mirror and rolling tag updates, and rolling releases must be mutable.
-
-The workflow enforces exactly one release in this fork, including removing any other releases and extra assets. The stable release is named and tagged `firehol-blocklist-ipsets`.
-
 ## Validation
 
-`make check` checks Rust formatting, Clippy, Rust integration tests and Python workflow tests. Tests cover duplicates, metadata alignment, nested prefix inheritance, IPv4/IPv6, ignored directories, metadata changes, disk-run compaction, invalid input, failed publication retries and first-release creation. A reference test checks every address in a `/24` against all source memberships.
+✅ `make check` runs Rustfmt, Clippy, Rust integration tests, and Python workflow tests. Tests cover duplicates, array alignment, overlapping prefixes, IPv4/IPv6, directory exclusions, metadata changes, disk-run compaction, invalid inputs, exact `main` synchronization, failed publication retries, and first-release recovery. A reference test checks every address in a `/24` against all source memberships.
 
-Blocklist contents remain governed by the individual upstream sources and FireHOL's original licensing notices. Review those terms before redistributing or commercially using the generated data.
+The first full production build on 2026-10-05 used 149 source files and passed independent MaxMind Python-reader validation:
+
+| Metric | Result |
+| --- | ---: |
+| Parsed source contributions | 7,995,654 |
+| Stored prefixes | 3,834,721 |
+| MMDB size | 136,514,099 bytes |
+| Independent sample lookups | 866 |
+| Generation time on that runner | 4.77 seconds |
+| Maximum resident memory on that runner | 905,268 KiB |
+
+These measurements describe that source snapshot and runner; later snapshots can differ.
+
+## Contributing
+
+🛠️ Read [AGENTS.md](AGENTS.md) before changing the pipeline. Keep all generator changes on `mmdb-pipeline`, keep `main` an exact upstream mirror, and run `make check` before publishing changes. Preserve the stable asset name, parallel-array metadata, duplicate contributions, and successful-publication retry logic.
+
+## Source licensing
+
+Blocklist contents remain governed by the individual upstream sources and FireHOL's original licensing notices, preserved with the source snapshot on `main`. Review those terms before redistributing or commercially using the generated data.
