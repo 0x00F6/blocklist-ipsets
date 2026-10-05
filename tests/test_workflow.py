@@ -26,6 +26,7 @@ class FakeGitHub:
 
     def __init__(self, existing=True):
         self.current = release() if existing else None
+        self.tag = {"object": {"sha": OLD}} if existing else None
         self.calls = []
         self.repo = {"fork": True, "parent": {"full_name": "firehol/blocklist-ipsets"}, "default_branch": "mmdb-pipeline"}
         self.other = [{"id": 2, "tag_name": "old"}]
@@ -36,6 +37,16 @@ class FakeGitHub:
             return {"commit": {"sha": SHA}}
         if method == "GET" and path == "/repos/" + self.repository:
             return copy.deepcopy(self.repo)
+        if method == "GET" and "/git/ref/tags/" in path:
+            return copy.deepcopy(self.tag)
+        if method == "POST" and path.endswith("/git/refs"):
+            self.tag = {"object": {"sha": data["sha"]}}
+            return copy.deepcopy(self.tag)
+        if method == "PATCH" and "/git/refs/tags/" in path:
+            if self.tag is None:
+                raise RuntimeError("Missing tag: draft releases do not create refs")
+            self.tag["object"]["sha"] = data["sha"]
+            return copy.deepcopy(self.tag)
         if method == "GET" and "/releases/" in path:
             return copy.deepcopy(self.current)
         if method == "POST" and path.endswith("/releases"):
@@ -93,6 +104,8 @@ class WorkflowTests(unittest.TestCase):
         prune = next(i for i,c in enumerate(api.calls) if c[0] == "DELETE")
         self.assertLess(prune, update)
         self.assertEqual(api.calls[prune][1], "/repos/0x00F6/blocklist-ipsets/releases/2")
+        self.assertEqual(api.tag["object"]["sha"], SHA)
+        self.assertFalse(any(c[0] == "POST" and c[1].endswith("/git/refs") for c in api.calls))
 
     def test_no_change_sync_still_enforces_one_release(self):
         api = FakeGitHub()
@@ -122,6 +135,18 @@ class WorkflowTests(unittest.TestCase):
                 api.current["assets"] = release()["assets"]
             publish(api, asset, SHA, upload=upload)
         self.assertFalse(api.current["draft"])
+        self.assertFalse(needs_build(api.current, SHA))
+        self.assertEqual(api.tag["object"]["sha"], SHA)
+
+    def test_retry_of_uploaded_draft_creates_missing_tag(self):
+        api = FakeGitHub()
+        api.current["draft"] = True
+        api.tag = None
+        with tempfile.TemporaryDirectory() as directory:
+            asset = Path(directory) / ASSET
+            asset.write_bytes(b"mmdb")
+            publish(api, asset, SHA, upload=lambda path: None)
+        self.assertEqual(api.tag["object"]["sha"], SHA)
         self.assertFalse(needs_build(api.current, SHA))
 
     def test_invalid_asset_never_touches_remote(self):

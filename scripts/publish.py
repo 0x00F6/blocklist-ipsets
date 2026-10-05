@@ -43,7 +43,12 @@ def publish(api, asset, sha, upload=None):
         f"Download: https://github.com/{api.repository}/releases/download/{TAG}/{ASSET}",
     ])
     # Complete tag movement and cleanup before marking this SHA published.
-    api.request("PATCH", f"/repos/{api.repository}/git/refs/tags/{TAG}", {"sha": sha, "force": True})
+    tag = api.request("GET", f"/repos/{api.repository}/git/ref/tags/{TAG}", missing_ok=True)
+    if tag is None:
+        # Draft releases do not create their tag until publication.
+        api.request("POST", f"/repos/{api.repository}/git/refs", {"ref": f"refs/tags/{TAG}", "sha": sha})
+    else:
+        api.request("PATCH", f"/repos/{api.repository}/git/refs/tags/{TAG}", {"sha": sha, "force": True})
     for existing in api.releases():
         if existing["id"] != release["id"]:
             api.request("DELETE", f"/repos/{api.repository}/releases/{existing['id']}")
