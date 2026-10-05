@@ -39,7 +39,7 @@ tar -xzf firehol-blocklist-ipsets.mmdb.tar.gz
 
 🔐 Before publication, the archive is read through its gzip CRC trailer and its decompressed MMDB is compared with the original by SHA-256. No files are extracted during verification. Both uploaded files are then confirmed by name, size, upload state, and SHA-256 when GitHub provides a digest.
 
-A gzip-9 benchmark on the 2026-10-05 source snapshot reduced **136.51 MB to approximately 54.53 MB**, saving **60.05%**. Exact archive sizes can vary with the source snapshot and compression tooling; use the release's measured sizes and hashes.
+The verified production archive for source commit `3417de0f1f36025827c9a2752c8672e2c5fce097` reduces **136.51 MB to 53.60 MB**, saving **60.74%**. Exact archive sizes can vary with the source snapshot and compression tooling; use the release's measured sizes and hashes.
 
 ## Branches and files
 
@@ -163,6 +163,8 @@ The first full production build on 2026-10-05 used 149 source files and passed i
 | Parsed source contributions | 7,995,654 |
 | Stored prefixes | 3,834,721 |
 | MMDB size | 136,514,099 bytes |
+| Verified gzip-9 archive size for the same snapshot | 53,599,273 bytes |
+| Archive size reduction | 60.74% |
 | Independent sample lookups | 866 |
 | Generation time on that runner | 4.77 seconds |
 | Maximum resident memory on that runner | 905,268 KiB |
