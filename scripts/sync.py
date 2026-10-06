@@ -7,6 +7,7 @@ TAG = "firehol-blocklist-ipsets"
 ASSET = TAG + ".mmdb"
 ARCHIVE = ASSET + ".tar.gz"
 ASSETS = (ASSET, ARCHIVE)
+STAGING_PREFIX = TAG + "-staging-"
 MIRROR = "main"
 
 
@@ -17,6 +18,12 @@ def needs_build(release, upstream_sha, force=False):
     complete = all(any(asset["name"] == name and asset.get("size", 0) > 0 and asset.get("state") == "uploaded" for asset in release.get("assets", [])) for name in ASSETS)
     complete = complete and "Publication status: complete" in release.get("body", "").splitlines()
     return marker not in release.get("body", "").splitlines() or not complete
+
+
+def pending_publication(release):
+    tag = release.get("tag_name", "")
+    return tag.startswith(STAGING_PREFIX) or (tag == TAG and (
+        release.get("draft") or "Publication status: pending" in release.get("body", "").splitlines()))
 
 
 def run(api, force=False, emit=None):
@@ -36,10 +43,11 @@ def run(api, force=False, emit=None):
     if mirrored_sha != sha:
         raise RuntimeError(f"Mirror verification failed: {MIRROR} points to {mirrored_sha}, expected {sha}; retry synchronization")
     release = api.request("GET", f"/repos/{api.repository}/releases/tags/{TAG}", missing_ok=True)
-    changed = needs_build(release, sha, force)
+    releases = api.releases()
+    changed = needs_build(release, sha, force) or any(pending_publication(item) for item in releases)
     if not changed:
         # Enforce the one-release policy even when no rebuild is needed.
-        for existing in api.releases():
+        for existing in releases:
             if existing["id"] != release["id"]:
                 api.request("DELETE", f"/repos/{api.repository}/releases/{existing['id']}")
         for extra in release.get("assets", []):

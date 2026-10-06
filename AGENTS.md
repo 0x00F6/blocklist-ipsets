@@ -27,18 +27,19 @@
 
 ## Release lifecycle
 
-- Publish exactly two uploaded assets, `firehol-blocklist-ipsets.mmdb` and `firehol-blocklist-ipsets.mmdb.tar.gz`, in one mutable release/tag, `firehol-blocklist-ipsets`. Preserve both stable names and download links. GitHub's automatic source archives are separate from uploaded assets.
+- Publish a new mutable release object for each successful build, then delete the previous release. Finish with exactly one release tagged `firehol-blocklist-ipsets` and two uploaded assets, `firehol-blocklist-ipsets.mmdb` and `firehol-blocklist-ipsets.mmdb.tar.gz`. Preserve both stable names and download links. GitHub's automatic source archives are separate from uploaded assets.
 - Validate the MMDB with both the Rust reader and independent MaxMind Python reader before creating the archive or replacing remote assets.
 - Use maximum gzip level 9 and USTAR with exactly one MMDB entry. Set its timestamp to the source commit epoch, permissions to 0644, and owner/group IDs to zero; omit gzip filename and generation date. Verify the gzip CRC and decompressed SHA-256 against the original before uploading. Replace local archive output only after verification succeeds.
-- Recover existing drafts through the release list; upload by exact release ID and create a missing tag before publishing.
-- Mark publication pending before either upload, then confirm both assets by name, size, uploaded state, and digest when available. Mark the source SHA complete only after both uploads, tag movement, and cleanup. Retry partial uploads even for forced rebuilds of the same SHA. Enforce one release with exactly the two assets on unchanged-source runs too.
+- Create the replacement as a draft under a unique `firehol-blocklist-ipsets-staging-` tag. Recover interrupted draft or published replacements for the same source SHA through the release list; upload by exact release ID and create a missing tag before publishing. Never replace the completed release's assets during preparation.
+- Mark only the replacement pending before either upload. Confirm both assets by name, size, uploaded state, and digest when available; publish the replacement and confirm it is public with both files before deleting any previous release. Then move the stable tag to the source SHA and retag the replacement. Delete only staging refs owned by this pipeline. Mark publication complete after the stable handover and cleanup succeed, so GitHub displays the new object's publication date.
+- Retry pending replacements even when the completed stable release already contains the same source SHA. Preserve the new published release for recovery if deletion or stable handover fails. Enforce one release with exactly the two assets on unchanged-source runs too.
 - Generate release notes with both download links, actual sizes, compression savings, extraction instructions, SHA-256 hashes, source SHA, and source-date build_epoch.
 - Never store credentials or personal access tokens in the repository. Use the workflow's built-in `GITHUB_TOKEN` with `contents: write`.
 
 ## Logs and verification
 
 - Log detailed English messages on one line, with file/line context and actionable errors. Include the synchronized branch, source SHA, input counts, output size, and validation result where relevant.
-- Run `make check` before publishing code changes. Keep meaningful coverage for overlap propagation, error cancellation, recursive exclusions, metadata alignment, mirror creation, exact-SHA verification, publication retries after partial two-file uploads, deterministic archive headers, corrupt gzip rejection, and decompression integrity.
+- Run `make check` before publishing code changes. Keep meaningful coverage for overlap propagation, error cancellation, recursive exclusions, metadata alignment, mirror creation, exact-SHA verification, publication before old-release deletion, recovery after uploads/publication/deletion/tag handover, deterministic archive headers, corrupt gzip rejection, and decompression integrity.
 - After workflow or synchronization changes, verify a complete GitHub Actions run using this fork's `main` source commit. Preserve the unchanged-source skip behavior.
 
 ## Project website

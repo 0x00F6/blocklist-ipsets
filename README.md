@@ -31,7 +31,7 @@ An hourly mirror of [firehol/blocklist-ipsets](https://github.com/firehol/blockl
 
 ## Download
 
-📦 Both files are published together in the [rolling release](https://github.com/0x00F6/blocklist-ipsets/releases/tag/firehol-blocklist-ipsets).
+📦 Both files are published together in the [rolling release](https://github.com/0x00F6/blocklist-ipsets/releases/tag/firehol-blocklist-ipsets). Each successful build publishes a new release before deleting the previous one, renewing GitHub's displayed publication date while keeping the same download links.
 
 | Format | Stable download | Use |
 | --- | --- | --- |
@@ -88,14 +88,14 @@ The verified production archive for source commit `3417de0f1f36025827c9a2752c867
 
 Run it manually from [GitHub Actions](https://github.com/0x00F6/blocklist-ipsets/actions/workflows/hourly.yml): select **Run workflow**, choose `mmdb-pipeline`, and optionally enable the rebuild checkbox.
 
-🔐 The workflow uses the built-in `GITHUB_TOKEN` with `contents: write`. Branch rules must permit forced updates to `main`, tag rules must permit moving `firehol-blocklist-ipsets`, and the release must remain mutable. Repository permissions must allow GitHub Actions.
+🔐 The workflow uses the built-in `GITHUB_TOKEN` with `contents: write`. Branch rules must permit forced updates to `main`; tag rules must permit moving `firehol-blocklist-ipsets` and creating/deleting the pipeline's `firehol-blocklist-ipsets-staging-*` tags. Releases must remain mutable. Repository permissions must allow GitHub Actions.
 
-A failed build is retried even when `main` already matches upstream. Either missing or incomplete file also triggers a rebuild. Publication is marked `pending` before replacing either asset and `complete` only after both uploads, tag movement, and cleanup succeed. An interrupted forced rebuild is retried even for the same source SHA. Unchanged-source runs still enforce one release with exactly two uploaded assets.
+A failed build is retried even when `main` already matches upstream. Either missing or incomplete file also triggers a rebuild. A pending replacement also triggers a retry, including a failed forced rebuild of the same source SHA. The previous release remains available while the replacement is prepared. Publication becomes `complete` only after both files are confirmed in the new published release, the old releases are deleted, and the stable tag and staging cleanup succeed. Unchanged-source runs still enforce one release with exactly two uploaded assets.
 
 ## Generation
 
 1. Fetch the current FireHOL `master` SHA and force-update this fork's `main` reference, creating it if missing.
-2. Compare that SHA with the last **successfully published** rolling release and check that both assets are uploaded and publication is marked complete. Skip compilation when all checks pass. Missing releases or interrupted builds are retried.
+2. Compare that SHA with the last **successfully published** rolling release and check that both assets are uploaded, publication is marked complete, and no pending replacement exists. Skip compilation when all checks pass. Missing releases or interrupted builds are retried.
 3. Verify that `main` points to that SHA, then check out that exact commit from this fork into `data/`. Read its Git committer timestamp for the MMDB `build_epoch`. Subsequent branch updates cannot change the build inputs.
 4. Walk `.ipset` and `.netset` files recursively. Prune every directory ending with `_country`; skip hidden directories and symlinks.
 5. Parse files in parallel with Rayon, largest first. Normalize bare IPv4 to `/32` and IPv6 to `/128`. Preserve CIDRs and mask host bits. Parse headers, inline comments, CRLF, BOM and metadata changes within files. Invalid addresses fail with file/line context.
@@ -104,7 +104,8 @@ A failed build is retried even when `main` already matches upstream. Either miss
 8. Build aligned arrays using the actual `MergeStrategy::DeepMerge` writer. Duplicate values remain present. Cache up to 4,096 reusable merged payloads; this cache does not remove duplicate entries. A single writer builds the final IPv4/IPv6 MMDB.
 9. Validate the generated MMDB with the Rust reader and sampled source contributions with MaxMind's independent Python reader. Check that `build_epoch` exactly matches the source commit timestamp and log the actual file metadata. Only validated output replaces the local file.
 10. Create the gzip-9 tar archive, verify it contains only the expected MMDB, and check decompression against the original SHA-256. Replace the local archive only after verification succeeds.
-11. Reuse an existing draft if publication was interrupted. Mark publication pending, upload both files to its exact release ID, confirm both assets, create or update the tag, and remove other releases and extra assets. Mark the source SHA complete only after those operations succeed. Build failures preserve the prior release; an interrupted asset replacement can temporarily leave a download unavailable and is retried on the next run.
+11. Create a new draft under a unique temporary staging tag, or resume an interrupted replacement for the same source SHA. Mark only that replacement pending, upload both files to its exact release ID, and confirm their sizes, uploaded state, and hashes. Publish the replacement and confirm both files again while the previous release is still available.
+12. Delete the previous releases, move `firehol-blocklist-ipsets` to the source SHA, and assign that stable tag to the new release. Remove staging tags and extra assets, then mark publication complete. The new release ID renews GitHub's publication date; stable download URLs stay the same. A brief cutover occurs when the stable tag is reassigned. If interrupted there, the new published release remains recoverable and the next run restores the stable links.
 
 The channel, sort runs, readers and payload cache are bounded. The final libmaxminddb-rs trie is in memory, so peak memory still grows with the number of distinct prefixes and metadata combinations. No claim of bounded total memory is made.
 
@@ -167,7 +168,7 @@ Set `FIREHOL_PARSER_THREADS` to override available CPU count. The Rust API also 
 
 ## Validation
 
-✅ `make check` runs Rustfmt, Clippy, Rust integration tests, and Python workflow and archive tests. Tests cover duplicates, array alignment, overlapping prefixes, IPv4/IPv6, directory exclusions, metadata changes, disk-run compaction, invalid inputs, exact `main` synchronization, failed publication retries (including a partial two-file upload of the same source SHA), first-release recovery, deterministic archive headers, gzip corruption, and decompression integrity. A reference test checks every address in a `/24` against all source memberships.
+✅ `make check` runs Rustfmt, Clippy, Rust integration tests, and Python workflow and archive tests. Tests cover duplicates, array alignment, overlapping prefixes, IPv4/IPv6, directory exclusions, metadata changes, disk-run compaction, invalid inputs, exact `main` synchronization, publication before deleting the previous release, retries after uploads/publication/deletion/tag handover (including forced rebuilds of the same source SHA), first-release recovery, deterministic archive headers, gzip corruption, and decompression integrity. A reference test checks every address in a `/24` against all source memberships.
 
 The first full production build on 2026-10-05 used 149 source files and passed independent MaxMind Python-reader validation:
 
