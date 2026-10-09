@@ -3,6 +3,8 @@ name: Sync FireHOL and publish MMDB
 on:
   schedule:
     - cron: '7 * * * *'
+  repository_dispatch:
+    types: [firehol-updated]
   workflow_dispatch:
     inputs:
       force:

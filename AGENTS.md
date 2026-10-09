@@ -11,7 +11,7 @@
 
 - Read the upstream `master` SHA, create or force-update `main`, and verify that `main` points to exactly that SHA before emitting workflow outputs.
 - Check out that immutable SHA from this fork into `data/`. Do not generate from the pipeline branch or a moving branch reference.
-- Run the schedule hourly at minute 17 UTC. Preserve manual forced rebuilds and automatic rebuilds for pipeline code changes.
+- Keep the hourly GitHub fallback at minute 7 UTC. The Cloudflare Worker in `scripts/cloudflare-firehol/` polls every 30 minutes (`*/30 * * * *`) and sends `firehol-updated` repository dispatches. Preserve manual forced rebuilds and automatic rebuilds for pipeline code changes.
 - Compare the verified source SHA against the last successfully published release. Retry failed or missing publication even if `main` is already synchronized.
 
 ## Parsing and MMDB records

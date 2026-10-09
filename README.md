@@ -75,13 +75,14 @@ The verified production archive for source commit `3417de0f1f36025827c9a2752c867
 
 ## Automation
 
-⏱️ The schedule is `17 * * * *`: every hour at minute 17, in UTC. GitHub can delay scheduled runs.
+⏱️ The schedule is `7 * * * *`: every hour at minute 7, in UTC. GitHub can delay scheduled runs.
 
 `mmdb-pipeline` stays the default branch so GitHub discovers the schedule. The workflow runs there and uses the synchronized data commit from `main` for generation.
 
 | Trigger | Behavior |
 | --- | --- |
-| Hourly schedule | Synchronize `main`; build only if the current upstream SHA has not been successfully published |
+| Cloudflare `firehol-updated` dispatch | Synchronize and build only if the upstream SHA has not been successfully published |
+| Hourly fallback schedule | Synchronize `main`; build only if the current upstream SHA has not been successfully published |
 | Manual run | Same behavior; enable **Rebuild even if the upstream SHA is already published** to force a rebuild |
 | Pipeline code change | Synchronize `main` and rebuild to validate and publish the updated generator |
 | README or AGENTS update | Documentation update without an automatic rebuild |
@@ -91,6 +92,33 @@ Run it manually from [GitHub Actions](https://github.com/0x00F6/blocklist-ipsets
 🔐 The workflow uses the built-in `GITHUB_TOKEN` with `contents: write`. Branch rules must permit forced updates to `main`; tag rules must permit moving `firehol-blocklist-ipsets` and creating/deleting the pipeline's `firehol-blocklist-ipsets-staging-*` tags. Releases must remain mutable. Repository permissions must allow GitHub Actions.
 
 A failed build is retried even when `main` already matches upstream. Either missing or incomplete file also triggers a rebuild. A pending replacement also triggers a retry, including a failed forced rebuild of the same source SHA. The previous release remains available while the replacement is prepared. Publication becomes `complete` only after both files are confirmed in the new published release, the old releases are deleted, and the stable tag and staging cleanup succeed. Unchanged-source runs still enforce one release with exactly two uploaded assets.
+
+### Cloudflare monitor (every 30 minutes)
+
+The Worker in `scripts/cloudflare-firehol/` checks upstream `master` at minute **00 and 30 UTC**, then sends `repository_dispatch` with type `firehol-updated` only when the SHA differs from its last accepted dispatch. The first poll also dispatches. GitHub independently fetches and verifies the official upstream SHA: it does not trust the payload as a build input. The existing hourly schedule remains a retry fallback for failed builds and missed dispatches.
+
+**Deployment requires your Cloudflare account and a GitHub token; committing these files does not activate the Worker.** From a checkout of `mmdb-pipeline` with Node.js 22+:
+
+```bash
+cd scripts/cloudflare-firehol
+node --test worker.test.mjs
+npx wrangler@4 login
+npx wrangler@4 kv namespace create STATE
+```
+
+Replace `REPLACE_WITH_KV_NAMESPACE_ID` in `wrangler.jsonc` with the returned namespace ID, then:
+
+```bash
+npx wrangler@4 secret put GITHUB_TOKEN
+npx wrangler@4 deploy
+npx wrangler@4 tail
+```
+
+Enter the GitHub token only at Wrangler's secret prompt. Use a fine-grained token restricted to `0x00F6/blocklist-ipsets`, with **Contents: write** for repository dispatch. Public upstream reads use the same authenticated token. Do not use the workflow's ephemeral `GITHUB_TOKEN` as this persistent Worker secret. Renew the token before expiry.
+
+In Cloudflare, verify the `firehol-commit-monitor` Worker has the `STATE` KV binding, `GITHUB_TOKEN` secret, and cron `*/30 * * * *`. Cron configuration changes can take up to 15 minutes to propagate. The next tick logs `dispatched` or `unchanged`; check the matching GitHub Actions run and its final conclusion. Logs never include the token. The Worker has no public HTTP endpoint.
+
+KV is updated only after GitHub accepts a dispatch. A failed dispatch is retried next tick. A failure between dispatch and KV persistence, overlapping invocations, or KV propagation may cause a duplicate dispatch; GitHub concurrency and the successful-release SHA check make repeats safe. An accepted dispatch is not proof of a successful build: the hourly fallback handles failed publication. Polling observes the current branch tip and can coalesce multiple commits between ticks.
 
 ## Generation
 

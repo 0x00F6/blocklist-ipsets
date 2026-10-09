@@ -4,6 +4,7 @@ OUTPUT ?= dist/firehol-blocklist-ipsets.mmdb
 help:
 	@echo 'make check | test | build | generate DATA=... OUTPUT=... | archive DATA=... OUTPUT=... | fmt'
 check:
+	node --test scripts/cloudflare-firehol/worker.test.mjs
 	cargo fmt --check
 	cargo clippy --locked --all-targets -- -D warnings
 	cargo test --locked

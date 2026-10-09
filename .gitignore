@@ -4,3 +4,9 @@
 *.mmdb
 __pycache__/
 
+
+# Local Cloudflare credentials and tooling
+/scripts/cloudflare-firehol/node_modules/
+/scripts/cloudflare-firehol/.wrangler/
+/scripts/cloudflare-firehol/.dev.vars*
+/scripts/cloudflare-firehol/.env*
