@@ -33,7 +33,8 @@ class FakeGitHub:
         self.tags = {TAG: {"object": {"sha": OLD}}} if existing else {}
         self.next_id = 100
         self.mirror = OLD
-        self.mirror_mismatch = False
+        self.mirror_ref_mismatch = False
+        self.stale_mirror_reads = 0
         self.calls = []
         self.repo = {"fork": True, "parent": {"full_name": "firehol/blocklist-ipsets"}, "default_branch": "mmdb-pipeline"}
         self.fail_publish = self.fail_retag = self.fail_tag_cleanup = False
@@ -72,9 +73,12 @@ class FakeGitHub:
         self.calls.append((method, path, data))
         if path.endswith("/branches/master"):
             return {"commit": {"sha": SHA}}
-        if path.endswith("/branches/main"):
-            return {"commit": {"sha": OLD if self.mirror_mismatch else self.mirror}}
         if method == "GET" and path.endswith("/git/ref/heads/main"):
+            if self.mirror_ref_mismatch:
+                return {"object": {"sha": OLD}}
+            if self.stale_mirror_reads > 0 and self.mirror == SHA:
+                self.stale_mirror_reads -= 1
+                return {"object": {"sha": OLD}}
             return {"object": {"sha": self.mirror}} if self.mirror else None
         if method == "PATCH" and path.endswith("/git/refs/heads/main"):
             self.mirror = data["sha"]
@@ -185,14 +189,27 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn(("POST", "/repos/0x00F6/blocklist-ipsets/git/refs", {"ref": "refs/heads/main", "sha": SHA}), api.calls)
         self.assertFalse(any(c[0] == "PATCH" for c in api.calls))
 
+    def test_stale_mirror_ref_is_retried_until_it_matches(self):
+        api = FakeGitHub()
+        api.stale_mirror_reads = 2
+        with patch("sync.time.sleep") as sleep:
+            self.assertEqual(run(api), (SHA, True))
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2])
+        mirror_reads = [c for c in api.calls if c[0] == "GET" and c[1].endswith("/git/ref/heads/main")]
+        self.assertEqual(len(mirror_reads), 4)  # Initial lookup + three verification attempts.
+        self.assertFalse(any(c[1].endswith("/branches/main") for c in api.calls))
+
     def test_mismatched_main_fails_before_emitting_outputs_or_pruning(self):
         api = FakeGitHub()
-        api.mirror_mismatch = True
+        api.mirror_ref_mismatch = True
         outputs = []
-        with self.assertRaisesRegex(RuntimeError, "Mirror verification failed"):
-            run(api, emit=lambda *args: outputs.append(args))
+        with patch("sync.time.sleep") as sleep:
+            with self.assertRaisesRegex(RuntimeError, "Mirror verification failed after 6 attempts"):
+                run(api, emit=lambda *args: outputs.append(args))
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2, 4, 8, 8])
         self.assertEqual(outputs, [])
         self.assertFalse(any(c[0] == "DELETE" for c in api.calls))
+        self.assertFalse(any("/releases" in c[1] for c in api.calls))
 
     def test_sync_checks_parent_and_default_branch_before_mutation(self):
         for wrong in ({"fork": False}, {"parent": {"full_name": "wrong/repo"}}, {"default_branch": "master"}):

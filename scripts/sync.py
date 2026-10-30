@@ -1,6 +1,7 @@
 """Force-sync the mirror and compare against the last completed publication."""
 import argparse
 import os
+import time
 from github_api import GitHub
 
 TAG = "firehol-blocklist-ipsets"
@@ -39,9 +40,17 @@ def run(api, force=False, emit=None):
         api.request("POST", f"/repos/{api.repository}/git/refs", {"ref": f"refs/heads/{MIRROR}", "sha": sha})
     else:
         api.request("PATCH", f"/repos/{api.repository}/git/refs/heads/{MIRROR}", {"sha": sha, "force": True})
-    mirrored_sha = api.request("GET", f"/repos/{api.repository}/branches/{MIRROR}")["commit"]["sha"]
-    if mirrored_sha != sha:
-        raise RuntimeError(f"Mirror verification failed: {MIRROR} points to {mirrored_sha}, expected {sha}; retry synchronization")
+    # Verify the Git ref directly; API reads can briefly lag behind a ref update.
+    for attempt in range(6):
+        mirrored_sha = api.request("GET", f"/repos/{api.repository}/git/ref/heads/{MIRROR}")["object"]["sha"]
+        if mirrored_sha == sha:
+            break
+        if attempt < 5:
+            delay = min(2 ** attempt, 8)
+            print(f"INFO mirror_verification_retry attempt={attempt + 1} observed={mirrored_sha} expected={sha} delay_seconds={delay}")
+            time.sleep(delay)
+    else:
+        raise RuntimeError(f"Mirror verification failed after 6 attempts: {MIRROR} points to {mirrored_sha}, expected {sha}; retry synchronization")
     release = api.request("GET", f"/repos/{api.repository}/releases/tags/{TAG}", missing_ok=True)
     releases = api.releases()
     changed = needs_build(release, sha, force) or any(pending_publication(item) for item in releases)
